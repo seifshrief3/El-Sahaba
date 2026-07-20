@@ -2,33 +2,72 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 
 const CustomerFollowup = () => {
-  // بيانات مبسطة
-  const [brandsFollowup] = useState([
+  // بيانات مبسطة تعكس اللوجيك الجديد (متابعة الموافقات)
+  const [collectionsFollowup, setCollectionsFollowup] = useState([
     {
-      id: "2284",
-      name: "مدرسة ستانفورد",
-      phase: "جاري القص والتنفيذ",
-      status: "يسير حسب الخطة",
-      isUrgent: false,
-      btnText: "إرسال تحديث",
+      id: "C-101",
+      brandName: "مدرسة ستانفورد",
+      brandCode: "STN-26",
+      collectionName: "الزي المدرسي الشتوي",
+      approvalStatus: "لم يتم الإرسال",
     },
     {
-      id: "7622",
-      name: "شركة الأمل",
-      phase: "في انتظار اعتماد السعر",
-      status: "متوقف على العميل",
-      isUrgent: true,
-      btnText: "تذكير بالاعتماد",
+      id: "C-102",
+      brandName: "شركة الأمل",
+      brandCode: "AML-09",
+      collectionName: "كولكشن صيف 2026",
+      approvalStatus: "تم الإرسال",
     },
     {
-      id: "8890",
-      name: "براند إيليت",
-      phase: "الطباعة والتطريز",
-      status: "متأخر عن الموعد",
-      isUrgent: true,
-      btnText: "تواصل عاجل",
+      id: "C-103",
+      brandName: "براند إيليت",
+      brandCode: "ELT-44",
+      collectionName: "تيشيرتات بولو موظفين",
+      approvalStatus: "طلب تعديل",
+    },
+    {
+      id: "C-104",
+      brandName: "ستار كيدز",
+      brandCode: "SKD-01",
+      collectionName: "كولكشن أطفال خريفي",
+      approvalStatus: "تمت الموافقة",
     },
   ]);
+
+  // قائمة الحالات المتاحة (كما طلب العميل)
+  const availableStatuses = [
+    "لم يتم الإرسال",
+    "تم الإرسال",
+    "طلب تعديل",
+    "تم التعديل",
+    "تمت الموافقة",
+  ];
+
+  // دالة لتغيير حالة الموافقة
+  const handleStatusChange = (id, newStatus) => {
+    setCollectionsFollowup((prev) =>
+      prev.map((col) =>
+        col.id === id ? { ...col, approvalStatus: newStatus } : col,
+      ),
+    );
+  };
+
+  // دالة لتحديد لون الحالة
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "لم يتم الإرسال":
+        return "bg-slate-100 text-slate-600 border-slate-200";
+      case "تم الإرسال":
+      case "تم التعديل":
+        return "bg-blue-50 text-blue-700 border-blue-200";
+      case "طلب تعديل":
+        return "bg-red-50 text-red-700 border-red-200";
+      case "تمت الموافقة":
+        return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      default:
+        return "bg-slate-100 text-slate-600 border-slate-200";
+    }
+  };
 
   return (
     <div
@@ -36,85 +75,116 @@ const CustomerFollowup = () => {
       dir="rtl"
     >
       <div className="max-w-5xl mx-auto flex flex-col gap-6">
-        {/* 1. العنوان المبسط */}
+        {/* 1. العنوان */}
         <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-sm text-right">
-          <h1 className="text-lg sm:text-xl font-bold text-[#1a365d] mb-2">
-            متابعة العملاء (البراندات)
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500">
-            متابعة سريعة لحالة كل براند والإجراءات المطلوبة للتواصل.
-          </p>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-[#1a365d] mb-2">
+                متابعة موافقات العملاء
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500">
+                تحديث حالة موافقة العميل على الـ Tech Pack وعرض السعر. لا يرسل
+                إلى التخطيط إلا بعد "تمت الموافقة".
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* 2. شريط البحث والفلترة - متجاوب */}
+        {/* 2. شريط البحث والفلترة */}
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           <input
             type="text"
-            placeholder="ابحث باسم البراند أو الكود..."
+            placeholder="ابحث باسم البراند أو الكولكشن..."
             className="w-full sm:flex-1 border border-slate-300 rounded-xl p-3 text-sm focus:outline-none focus:border-blue-500 bg-white shadow-sm"
           />
           <select className="w-full sm:w-48 border border-slate-300 rounded-xl p-3 text-sm focus:outline-none focus:border-blue-500 bg-white shadow-sm text-slate-700">
             <option>كل الحالات</option>
-            <option>يحتاج تدخل</option>
-            <option>حسب الخطة</option>
+            {availableStatuses.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
           </select>
         </div>
 
-        {/* 3. قائمة البراندات */}
+        {/* 3. قائمة الكولكشنات ومتابعة الموافقة */}
         <div className="flex flex-col gap-4">
-          {brandsFollowup.map((brand, index) => (
+          {collectionsFollowup.map((collection) => (
             <div
-              key={index}
-              className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-6 hover:bg-slate-50 transition"
+              key={collection.id}
+              className={`bg-white rounded-2xl border ${
+                collection.approvalStatus === "تمت الموافقة"
+                  ? "border-emerald-300 shadow-md"
+                  : "border-slate-200 shadow-sm"
+              } p-5 transition-all`}
             >
-              {/* بيانات البراند (يمين) */}
-              <div className="w-full md:flex-1">
-                <div className="flex items-center gap-3 mb-1">
-                  <h3 className="font-bold text-[#1a365d] text-base sm:text-lg">
-                    {brand.name}
-                  </h3>
-                  <span className="text-slate-400 text-xs sm:text-sm">
-                    #{brand.id}
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4 mb-4">
+                {/* بيانات الكولكشن */}
+                <div className="text-right">
+                  <div className="flex items-center gap-3 mb-1">
+                    <h3 className="font-bold text-[#1a365d] text-lg">
+                      {collection.brandName}
+                    </h3>
+                    <span className="text-slate-400 text-sm">
+                      #{collection.brandCode}
+                    </span>
+                  </div>
+                  <p className="text-sm font-medium text-slate-700">
+                    كولكشن: {collection.collectionName}
+                  </p>
+                </div>
+
+                {/* الحالة الحالية (Badges) */}
+                <div>
+                  <span
+                    className={`inline-block px-4 py-1.5 rounded-full text-xs font-bold border ${getStatusColor(
+                      collection.approvalStatus,
+                    )}`}
+                  >
+                    الحالة الحالية: {collection.approvalStatus}
                   </span>
                 </div>
-                <p className="text-xs sm:text-sm text-slate-500">
-                  المرحلة:{" "}
-                  <span className="font-medium text-slate-700">
-                    {brand.phase}
+              </div>
+
+              {/* أزرار تحديث الحالة (كما طلب العميل بدون كتابة يدوية) */}
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                  <span className="text-xs font-bold text-slate-500 flex items-center ml-2">
+                    تحديث الحالة:
                   </span>
-                </p>
-              </div>
+                  {availableStatuses.map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => handleStatusChange(collection.id, status)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                        collection.approvalStatus === status
+                          ? "bg-[#1a365d] text-white border-[#1a365d]"
+                          : "bg-white text-slate-600 border-slate-300 hover:border-[#1a365d] hover:text-[#1a365d]"
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  ))}
+                </div>
 
-              {/* الحالة (وسط) */}
-              <div className="w-full md:w-auto text-right md:text-center">
-                <span
-                  className={`inline-block px-4 py-1.5 rounded-full text-xs font-bold border ${
-                    brand.isUrgent
-                      ? "bg-red-50 text-red-700 border-red-200"
-                      : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  }`}
-                >
-                  {brand.status}
-                </span>
-              </div>
-
-              {/* أزرار الإجراء */}
-              <div className="w-full md:w-auto flex gap-3 mt-2 md:mt-0">
-                <Link
-                  to={`/customer_service/edit_brands/${brand.id}`}
-                  className="flex-1 md:flex-none text-center text-[#1a365d] border border-[#1a365d] hover:bg-slate-100 px-4 sm:px-6 py-2.5 rounded-lg text-sm font-bold transition-colors"
-                >
-                  الملف
-                </Link>
-                <button
-                  className={`flex-1 md:flex-none px-4 sm:px-6 py-2.5 rounded-lg text-sm font-bold transition-colors text-white ${
-                    brand.isUrgent
-                      ? "bg-[#b91c1c] hover:bg-red-800"
-                      : "bg-[#1a365d] hover:bg-blue-900"
-                  }`}
-                >
-                  {brand.btnText} ◀
-                </button>
+                {/* زر إصدار أمر التشغيل (يظهر فقط عند الموافقة) */}
+                <div className="w-full sm:w-auto flex justify-end">
+                  {collection.approvalStatus === "تمت الموافقة" ? (
+                    <Link
+                      to={`/customer_service/start_order/${collection.id}`}
+                      className="bg-[#b91c1c] hover:bg-red-800 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto text-center flex items-center justify-center gap-2"
+                    >
+                      إصدار أمر التشغيل بالكميات ◀
+                    </Link>
+                  ) : (
+                    <button
+                      disabled
+                      className="bg-slate-100 text-slate-400 cursor-not-allowed px-6 py-2.5 rounded-lg text-sm font-bold w-full sm:w-auto"
+                    >
+                      أمر التشغيل مغلق
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}

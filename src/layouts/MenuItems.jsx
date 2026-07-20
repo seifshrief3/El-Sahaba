@@ -5,6 +5,10 @@ export const menuItems = {
       path: "/customer_service",
     },
     {
+      title: "اضافة براند",
+      path: "/customer_service/add_brand",
+    },
+    {
       title: "البراندات",
       path: "/customer_service/brands",
     },
@@ -23,10 +27,6 @@ export const menuItems = {
     {
       title: "المساعد الذكي للموديلات",
       path: "/customer_service/models_assistant",
-    },
-    {
-      title: "ملاحظات العملاء",
-      path: "/customer_service/customer_feedback",
     },
     {
       title: "متابعة العملاء",

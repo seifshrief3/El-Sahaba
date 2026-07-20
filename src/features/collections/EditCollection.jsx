@@ -1,7 +1,7 @@
 import React, { useState } from "react";
+import ShowExtraDetails from "../../components/ShowExtraDetails";
 
 const EditCollection = () => {
-  // حالة التحكم في إظهار وإخفاء التفاصيل الإضافية
   const [showExtraDetails, setShowExtraDetails] = useState(false);
 
   return (
@@ -10,7 +10,7 @@ const EditCollection = () => {
       dir="rtl"
     >
       <div className="max-w-6xl mx-auto flex flex-col gap-6">
-        {/* الكارت الرئيسي (العلوي) */}
+        {/* الكارت الرئيسي لبيانات الكولكشن */}
         <div className="bg-white rounded-2xl p-5 sm:p-8 border border-slate-200 shadow-sm">
           {/* الهيدر: العنوان ونسبة الاكتمال */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
@@ -152,141 +152,9 @@ const EditCollection = () => {
                   : "تفاصيل إضافية (اختياري) ▼"}
               </button>
 
-              {/* قسم التفاصيل الإضافية (يظهر عند الضغط) */}
+              {/* قسم التفاصيل الإضافية */}
               {showExtraDetails && (
-                <div className="bg-[#f8fafc] w-full rounded-xl border border-slate-200 p-4 sm:p-6 my-2 shadow-inner">
-                  {/* الصف الأول */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-2 text-right sm:text-center">
-                        كود الكولكشن
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue="COL-mrm379tgzsa6b"
-                        readOnly
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white text-right sm:text-center focus:outline-none text-slate-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-2 text-right sm:text-center line-clamp-1">
-                        اسم العميل (مسحوب من البراند)
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue="مدرسة ستانفورد"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm text-right sm:text-center focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-2 text-right sm:text-center">
-                        كود العميل
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue="6564"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm text-right sm:text-center focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-2 text-right sm:text-center">
-                        تليفون العميل
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue="6546"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm text-right sm:text-center focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-2 text-right sm:text-center">
-                        إيميل العميل
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue="hgfhf"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm text-right sm:text-center focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
-
-                  {/* الصف الثاني */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-2 text-right sm:text-center">
-                        نوع المنتج
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue="hfghf"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm text-right sm:text-center focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-2 text-right sm:text-center line-clamp-1">
-                        المقاسات العامة
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue="656"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm text-right sm:text-center focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-2 text-right sm:text-center">
-                        الكمية المتوقعة
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue="5646"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm text-right sm:text-center focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-2 text-right sm:text-center">
-                        نسبة العربون %
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue="5646"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm text-right sm:text-center focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-2 text-right sm:text-center">
-                        أولوية الكولكشن
-                      </label>
-                      <select className="w-full border border-slate-300 rounded-lg p-2.5 text-sm text-right sm:text-center focus:outline-none focus:border-blue-500 bg-white">
-                        <option>عادي</option>
-                        <option>عاجل</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* الصف الثالث */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-2 text-right sm:text-center">
-                        حالة الكولكشن
-                      </label>
-                      <select className="w-full border border-slate-300 rounded-lg p-2.5 text-sm text-right sm:text-center focus:outline-none focus:border-blue-500 bg-white">
-                        <option>مسودة</option>
-                        <option>قيد الاعداد</option>
-                        <option>بيانات مكتملة</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-2 text-right sm:text-center">
-                        حالة اعتماد البيانات
-                      </label>
-                      <select className="w-full border border-slate-300 rounded-lg p-2.5 text-sm text-right sm:text-center focus:outline-none focus:border-blue-500 bg-white">
-                        <option>لم يعتمد بعد</option>
-                        <option>معتمد جزئيا</option>
-                        <option>معتمد بالكامل</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
+                <ShowExtraDetails setShowExtraDetails={setShowExtraDetails} />
               )}
 
               {/* أزرار الحفظ */}
@@ -300,36 +168,6 @@ const EditCollection = () => {
               </div>
             </div>
           </form>
-        </div>
-
-        {/* الكارت السفلي (أمر التشغيل) */}
-        <div className="bg-white rounded-2xl p-5 sm:p-8 border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
-          <div className="text-right w-full sm:w-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg sm:text-xl font-bold text-[#1a365d]">
-                أمر التشغيل
-              </h3>
-              {/* شارة الحالة تظهر جنب العنوان في الموبايل أو على الشمال في الديسكتوب */}
-              <span className="sm:hidden bg-slate-100 text-slate-500 px-3 py-1.5 rounded-full text-xs font-bold border border-slate-200">
-                لم يصدر أمر
-              </span>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button className="bg-[#b91c1c] hover:bg-red-800 text-white px-6 sm:px-8 py-3 sm:py-2.5 rounded-lg text-sm font-bold w-full sm:w-auto transition flex items-center justify-center gap-2">
-                إصدار أمر بدء 🚀
-              </button>
-              <button className="text-[#1a365d] border border-[#1a365d] px-6 sm:px-8 py-3 sm:py-2.5 rounded-lg text-sm font-bold w-full sm:w-auto hover:bg-slate-50 transition flex items-center justify-center gap-2">
-                فتح سجل الأوامر 📜
-              </button>
-            </div>
-          </div>
-
-          <div className="hidden sm:block">
-            <span className="bg-slate-100 text-slate-500 px-5 py-2 rounded-full text-sm font-bold border border-slate-200">
-              لم يصدر أمر تشغيل
-            </span>
-          </div>
         </div>
       </div>
     </div>

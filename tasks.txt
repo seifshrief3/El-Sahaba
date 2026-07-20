@@ -1,0 +1,146 @@
+UI / UX => DONE
+
+Authentication
+  - Login
+  - Logout
+  - Protected Routes
+  - Role Based Routing (Customer Service / Planning / Management / Shipping & Inventory)
+
+==================================================
+Customer Service
+==================================================
+
+  - Add New Brand
+  - Edit / Delete Brand
+  - Add Brand Customers
+
+  - Add New Collection
+  - Add Models
+  - Upload Model Images
+  - Enter Fabric, Weight & Sizes
+  - AI Generate Tech Pack (Mockup)
+  - AI Generate Pricing Offer (Mockup)
+  - Review Collection
+  - Start Order
+  - Pause Order
+  - Resume Order
+  - Cancel Order
+  - Send Order To Planning
+
+==================================================
+Planning
+==================================================
+
+  - View Incoming Orders
+  - Review Tech Pack
+  - Set Production Timeline
+  - Update Production Stages
+  - Update Completed Quantities
+  - Add Notes / Issues
+  - Upload Progress Images
+  - Deliver Finished Order To Inventory
+
+==================================================
+Shipping & Inventory
+==================================================
+
+Inventory
+  - Receive Order From Planning
+  - Update Inventory Stock
+  - View Inventory
+  - Inventory Movement History
+  - Brand Inventory
+  - Collection Inventory
+  - Model Inventory
+
+Customers
+  - Add Brand Customer
+  - Edit Customer
+  - Delete Customer
+  - View Customer Details
+
+Shipments
+  - Create Shipment
+  - Reserve Stock
+  - Generate Shipping Number
+  - Update Shipment Status
+  - Partial Shipment
+  - Returned Shipment
+  - Cancel Shipment
+  - Shipping History
+
+Reports
+  - Generate Shipment Report
+  - Generate Inventory Report
+  - Generate Brand Inventory Report
+  - Generate Remaining Stock Report
+  - Preview Report
+  - Download PDF
+  - Send WhatsApp
+
+==================================================
+Management
+==================================================
+
+Dashboard
+  - Overall Statistics
+  - Latest Activities
+  - Orders Overview
+
+Brands
+  - View All Brands
+  - Brand Details
+
+Orders Follow-up
+  - Track All Orders
+  - View Order Timeline
+
+Approvals
+  - Pending Approvals
+  - Approve / Reject Requests
+
+Reports
+  - Management Reports
+  - PDF Reports
+
+Knowledge Base
+  - Upload Documents
+  - Manage Documents
+
+Edits History
+  - Activity Log
+  - User Actions
+
+==================================================
+AI
+==================================================
+
+  - Generate Tech Pack
+  - Analyze Model Images
+  - Generate Pricing Offer
+  - Detect Missing Data
+  - Suggest Production Timeline
+  - Predict Delays
+  - Generate Customer Reports
+  - Generate Management Reports
+  - Generate WhatsApp Messages
+
+==================================================
+Backend
+==================================================
+
+  - Supabase Database
+  - Authentication
+  - Row Level Security
+  - Storage (if needed)
+  - Edge Functions (optional)
+
+==================================================
+Automation (n8n)
+==================================================
+
+  - AI Workflows
+  - PDF Generation
+  - WhatsApp Messages
+  - Notifications
+  - Scheduled Reports

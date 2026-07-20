@@ -1,7 +1,6 @@
 import { Route, Routes } from "react-router-dom";
 import Login from "./pages/Login";
 import CustomerServiceHome from "./pages/customer_service/Home";
-import CustomerFeedback from "./pages/customer_service/CustomerFeedback";
 import ModelsAssistant from "./pages/customer_service/ModelsAssistant";
 import PlanningHome from "./pages/planning/Home";
 import DeliverablesSchedule from "./pages/planning/DeliverablesSchedule";
@@ -31,6 +30,8 @@ import Inventory from "./pages/shippingAndBarren/Inventory";
 import Customers from "./pages/shippingAndBarren/Customers";
 import Shipments from "./pages/shippingAndBarren/Shipments";
 import ShippingReports from "./pages/shippingAndBarren/ShippingReports";
+import StartOrder from "./pages/customer_service/StartOrder";
+import AllBrands from "./pages/customer_service/AllBrands";
 
 function App() {
   return (
@@ -47,10 +48,18 @@ function App() {
         }
       />
       <Route
-        path="/customer_service/brands"
+        path="/customer_service/add_brand"
         element={
           <DashboardLayout role="customer_service">
             <Brands />
+          </DashboardLayout>
+        }
+      />
+      <Route
+        path="/customer_service/brands"
+        element={
+          <DashboardLayout role="customer_service">
+            <AllBrands />
           </DashboardLayout>
         }
       />
@@ -103,14 +112,6 @@ function App() {
         }
       />
       <Route
-        path="/customer_service/customer_feedback"
-        element={
-          <DashboardLayout role="customer_service">
-            <CustomerFeedback />
-          </DashboardLayout>
-        }
-      />
-      <Route
         path="/customer_service/customer_followup"
         element={
           <DashboardLayout role="customer_service">
@@ -131,6 +132,14 @@ function App() {
         element={
           <DashboardLayout role="customer_service">
             <Pricing />
+          </DashboardLayout>
+        }
+      />
+      <Route
+        path="/customer_service/start_order/:id"
+        element={
+          <DashboardLayout role="customer_service">
+            <StartOrder />
           </DashboardLayout>
         }
       />

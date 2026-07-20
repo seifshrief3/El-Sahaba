@@ -96,18 +96,6 @@ const CollectionDetails = ({ collectionName, onBack }) => {
 
       {/* استدعاء الفورم وتمرير البيانات ليه */}
       <ModelForm activeModel={activeModel} onModelChange={handleModelChange} />
-
-      {/* كارت التحليل الفني */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col gap-4">
-        <div className="flex justify-between items-center">
-          <h3 className="text-lg font-bold text-[#1a365d]">
-            تحليل المنتج والورقة الفنية
-          </h3>
-        </div>
-        <button className="bg-[#b91c1c] text-white w-full py-3.5 rounded-lg text-base font-bold">
-          تحليل الموديل الحالي وإنشاء الورقة الفنية
-        </button>
-      </div>
     </div>
   );
 };
