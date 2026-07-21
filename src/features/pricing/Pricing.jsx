@@ -36,7 +36,7 @@ const Pricing = () => {
   const averageCost =
     dummyModels.length > 0 ? totalCost / dummyModels.length : 0;
   // 3. سعر البيع النهائي بعد إضافة نسبة الربح
-  const finalSellingPrice = totalCost + (totalCost * profitMargin) / 100;
+  const finalSellingPrice = averageCost + (averageCost * profitMargin) / 100;
 
   return (
     <div

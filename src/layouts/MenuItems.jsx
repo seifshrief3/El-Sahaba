@@ -44,20 +44,12 @@ export const menuItems = {
       path: "/planning",
     },
     {
-      title: "متابعة الكولكشنات",
-      path: "/planning/collections_followup",
-    },
-    {
-      title: "التحديث اليومي",
-      path: "/planning/daily_update",
+      title: "الكولكشنات",
+      path: "/planning/collections",
     },
     {
       title: "جدول التسليمات",
       path: "/planning/deliverables_schedule",
-    },
-    {
-      title: "المجموعات المتأخرة",
-      path: "/planning/late_collections",
     },
     {
       title: "المهندس المخطط",

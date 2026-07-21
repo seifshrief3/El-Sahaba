@@ -4,7 +4,6 @@ import CustomerServiceHome from "./pages/customer_service/Home";
 import ModelsAssistant from "./pages/customer_service/ModelsAssistant";
 import PlanningHome from "./pages/planning/Home";
 import DeliverablesSchedule from "./pages/planning/DeliverablesSchedule";
-import LateCollections from "./pages/planning/LateCollections";
 import PlanningEngineer from "./pages/planning/PlanningEngineer";
 import Dashboard from "./pages/managments/Dashboard";
 import EditsHistory from "./pages/managments/EditsHistory";
@@ -17,7 +16,6 @@ import AllCollections from "./features/collections/AllCollections";
 import DailyUpdate from "./features/dailyUpdate/DailyUpdate";
 import Pricing from "./features/pricing/Pricing";
 import DashboardLayout from "./layouts/DashboardLayout";
-import CollectionsFollowUp from "./features/collections/CollectionsFollowUp";
 import EditBrands from "./features/brands/EditBrands";
 import EditCollection from "./features/collections/EditCollection";
 import CustomerFollowup from "./pages/customer_service/CustomerFollowup";
@@ -32,6 +30,8 @@ import Shipments from "./pages/shippingAndBarren/Shipments";
 import ShippingReports from "./pages/shippingAndBarren/ShippingReports";
 import StartOrder from "./pages/customer_service/StartOrder";
 import AllBrands from "./pages/customer_service/AllBrands";
+import CollectionsFromCS from "./pages/planning/CollectionsFromCS";
+import Checklist from "./pages/planning/Checklist";
 
 function App() {
   return (
@@ -154,10 +154,18 @@ function App() {
         }
       />
       <Route
-        path="/planning/collections_followup"
+        path="/planning/collections"
         element={
           <DashboardLayout role="planning">
-            <CollectionsFollowUp />
+            <CollectionsFromCS />
+          </DashboardLayout>
+        }
+      />
+      <Route
+        path="/planning/checklist/:id"
+        element={
+          <DashboardLayout role="planning">
+            <Checklist />
           </DashboardLayout>
         }
       />
@@ -170,26 +178,10 @@ function App() {
         }
       />
       <Route
-        path="/planning/daily_update"
-        element={
-          <DashboardLayout role="planning">
-            <DailyUpdate />
-          </DashboardLayout>
-        }
-      />
-      <Route
         path="/planning/deliverables_schedule"
         element={
           <DashboardLayout role="planning">
             <DeliverablesSchedule />
-          </DashboardLayout>
-        }
-      />
-      <Route
-        path="/planning/late_collections"
-        element={
-          <DashboardLayout role="planning">
-            <LateCollections />
           </DashboardLayout>
         }
       />
