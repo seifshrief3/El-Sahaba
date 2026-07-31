@@ -57,7 +57,7 @@ export const menuItems = {
     },
   ],
 
-  shipping: [
+  warehouse: [
     {
       title: "الرئيسية",
       path: "/shipping",
@@ -84,7 +84,7 @@ export const menuItems = {
     },
   ],
 
-  managments: [
+  management: [
     {
       title: "الرئيسية",
       path: "/managments",

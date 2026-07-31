@@ -1,146 +1,584 @@
 UI / UX => DONE
 
-Authentication
-  - Login
-  - Logout
-  - Protected Routes
-  - Role Based Routing (Customer Service / Planning / Management / Shipping & Inventory)
 
 ==================================================
-Customer Service
+AUTHENTICATION
 ==================================================
 
-  - Add New Brand
-  - Edit / Delete Brand
-  - Add Brand Customers
+- Login => DONE
+- Logout => DONE
+- Protected Routes => DONE
+- Role-Based Routing => DONE
+  - Customer Service
+  - Planning
+  - Management
+  - Shipping & Inventory
 
-  - Add New Collection
-  - Add Models
-  - Upload Model Images
-  - Enter Fabric, Weight & Sizes
-  - AI Generate Tech Pack (Mockup)
-  - AI Generate Pricing Offer (Mockup)
-  - Review Collection
-  - Start Order
-  - Pause Order
-  - Resume Order
-  - Cancel Order
-  - Send Order To Planning
 
 ==================================================
-Planning
+CUSTOMER SERVICE
 ==================================================
 
-  - View Incoming Orders
-  - Review Tech Pack
-  - Set Production Timeline
-  - Update Production Stages
-  - Update Completed Quantities
-  - Add Notes / Issues
-  - Upload Progress Images
-  - Deliver Finished Order To Inventory
+
+------------------------------
+BRANDS
+------------------------------
+
+- Add New Brand => DONE
+- Edit Brand => DONE
+- Delete Brand => DONE
+- View All Brands => DONE
+- View Brand Details => DONE
+- View Latest Brand Activities => DONE
+- Generate Brand Report
+
+
+------------------------------
+COLLECTIONS
+------------------------------
+
+- Create New Collection =>
+- Select Brand => DONE
+- Enter Collection Details => DONE
+- Enter Number Of Models => DONE
+- Automatically Create Models Based On Number Of Models => DONE
+- View Collection Details => DONE
+- Review Collection Data => DONE
+- Edit Collection Data => DONE
+
+
+------------------------------
+MODELS
+------------------------------
+
+- Automatically Generate Models When Creating A Collection => DONE
+- Automatically Generate Model Numbers => DONE
+- Upload Model Image => DONE
+- Add Model Name => DONE
+- Add Model Description => DONE
+- Add Customer Notes => DONE
+- Select Multiple Sizes => DONE
+- Add Multiple Materials => DONE
+- Add Material Weight => DONE
+- Edit Model Data
+- Delete Model
+
+
+------------------------------
+AI TECH PACK
+------------------------------
+
+- Analyze Model Data => DONE
+- Analyze Model Image => DONE
+- Generate Tech Pack Using AI
+- Review Generated Tech Pack => DONE
+- Request Tech Pack Modification => DONE
+- Modify Tech Pack Using AI Chat Bot => DONE
+- Regenerate Tech Pack Using AI => DONE
+- Track Tech Pack Versions => DONE
+- Approve Final Tech Pack => DONE
+
+
+------------------------------
+PRICING & QUOTATIONS
+------------------------------
+
+- View Collections Ready For Pricing => DONE
+- Open Collection For Pricing => DONE
+- View All Collection Models => DONE
+- Enter Company Cost Per Model => DONE
+- Select Profit Percentage => DONE
+- Automatically Calculate Selling Price => DONE
+- Automatically Calculate Total Cost => DONE
+- Automatically Calculate Total Sales Price => DONE
+- Create Quotation => DONE
+- Edit Quotation => DONE
+- Generate Pricing Offer PDF => DONE
+- Preview Pricing Offer PDF => DONE
+- Send Pricing Offer To Client
+- Track Quotation Status => DONE
+
+Quotation Status:
+
+- Not Sent
+- Sent
+- Revision Requested
+- Revised
+- Approved
+- Rejected
+
+
+------------------------------
+CLIENT APPROVALS
+------------------------------
+
+- Track Tech Pack Approval => DONE
+- Track Quotation Approval => DONE
+- Track Contract Approval => DONE
+- Request Revision On Quotation => DONE
+- Approve => DONE
+- Reject => DONE
+
+
+------------------------------
+PRODUCTION ORDER / START ORDER
+------------------------------
+
+- Open Collection For Production Order
+- Select Required Sizes
+- Select Quantity Distribution
+- Use Saved Quantity Distribution
+- Automatically Calculate Quantity Per Model
+- Automatically Calculate Quantity Per Size
+- Automatically Calculate Total Collection Quantity
+- Automatically Calculate Total Order Value
+- Generate Production Order
+- Generate Collection Contract
+- Preview Contract
+- Send Contract To Client
+- Issue Production Order
+- Send Production Order To Planning
+
+
+------------------------------
+ORDER MANAGEMENT
+------------------------------
+
+- View Collection Order Status
+- Start Order
+- Pause Order
+- Resume Order
+- Cancel Order
+- Track Order Status
+
 
 ==================================================
-Shipping & Inventory
+PLANNING
 ==================================================
 
-Inventory
-  - Receive Order From Planning
-  - Update Inventory Stock
-  - View Inventory
-  - Inventory Movement History
-  - Brand Inventory
-  - Collection Inventory
-  - Model Inventory
 
-Customers
-  - Add Brand Customer
-  - Edit Customer
-  - Delete Customer
-  - View Customer Details
+------------------------------
+INCOMING ORDERS
+------------------------------
 
-Shipments
-  - Create Shipment
-  - Reserve Stock
-  - Generate Shipping Number
-  - Update Shipment Status
-  - Partial Shipment
-  - Returned Shipment
-  - Cancel Shipment
-  - Shipping History
+- View Orders Sent From Customer Service
+- Receive Production Order
+- Open Collection Details
+- View Models
+- View Model Images
+- View Approved Tech Packs
+- View Required Quantities
 
-Reports
-  - Generate Shipment Report
-  - Generate Inventory Report
-  - Generate Brand Inventory Report
-  - Generate Remaining Stock Report
-  - Preview Report
-  - Download PDF
-  - Send WhatsApp
+
+------------------------------
+COLLECTIONS
+------------------------------
+
+- View All Active Collections
+- Open Collection
+- View All Models
+- View Production Stages
+
+
+------------------------------
+PRODUCTION STAGE UPDATES
+------------------------------
+
+- Mark Stage As Not Started
+- Mark Stage As In Progress
+- Mark Stage As Completed
+- Mark Stage As Problem
+- Add Problem Note
+- Upload Problem Proof Image
+
+
+------------------------------
+PRODUCTION PROGRESS
+------------------------------
+
+- Automatically Calculate Progress Percentage
+- Automatically Calculate Completed Stages
+- Automatically Calculate Remaining Stages
+- Track Current Production Status
+- Predict Delays Using AI
+
+
+------------------------------
+PROGRESS UPDATES
+------------------------------
+
+- Update Production Stage
+- Add Short Note
+- Upload Progress Image When Needed
+
+
+------------------------------
+DELIVER FINISHED ORDER TO INVENTORY
+------------------------------
+
+- Mark Production Order As Completed
+- Prepare Finished Products
+- Send Finished Order To Inventory
+- Notify Warehouse / Inventory
+
 
 ==================================================
-Management
+SHIPPING & INVENTORY
 ==================================================
 
-Dashboard
-  - Overall Statistics
-  - Latest Activities
-  - Orders Overview
 
-Brands
-  - View All Brands
-  - Brand Details
+------------------------------
+INVENTORY - RECEIVING FROM PLANNING
+------------------------------
 
-Orders Follow-up
-  - Track All Orders
-  - View Order Timeline
+- View Incoming Finished Orders
+- Open Production Order
+- Review Models
+- Review Quantities
+- Receive Finished Products
+- Confirm Received Quantities
+- Add Receiving Notes
+- Create Warehouse Receiving Record
 
-Approvals
-  - Pending Approvals
-  - Approve / Reject Requests
 
-Reports
-  - Management Reports
-  - PDF Reports
+------------------------------
+INVENTORY
+------------------------------
 
-Knowledge Base
-  - Upload Documents
-  - Manage Documents
+- View Total Stock
+- View Available Stock
+- View Reserved Stock
+- View Shipped Stock
+- View Brand Inventory
+- View Collection Inventory
+- View Model Inventory
+- View Size Inventory
+- View Color Inventory
+- View Inventory Movement History
 
-Edits History
-  - Activity Log
-  - User Actions
+
+------------------------------
+INVENTORY MOVEMENTS
+------------------------------
+
+- Receive Stock
+- Reserve Stock
+- Release Reserved Stock
+- Ship Stock
+- Adjust Stock
+
+
+------------------------------
+CUSTOMERS
+------------------------------
+
+- Add Brand Customer
+- Edit Customer
+- Delete Customer
+- View Customer Details
+- View Customer Brands
+- View Shipment History
+- View Total Shipments
+
+
+------------------------------
+SHIPMENTS
+------------------------------
+
+- Create Shipment
+- Select Brand
+- Select Receiving Customer
+- Select Models
+- Select Sizes
+- Enter Quantities
+- Select Shipping Company
+- Add Tracking Number
+- Add Carton Count
+- Create Shipment
+
+
+------------------------------
+SHIPMENT OPERATIONS
+------------------------------
+
+- Reserve Stock
+- Generate Shipping Number
+- Update Shipment Status
+- Create Partial Shipment
+- Track Shipment
+- Cancel Shipment
+- Record Returned Shipment
+- View Shipping History
+
+
+Shipment Status:
+
+- Draft
+- Preparing
+- Reserved
+- Partially Shipped
+- Shipped
+- Delivered
+- Returned
+- Cancelled
+
+
+==================================================
+REPORTS
+==================================================
+
+
+------------------------------
+SHIPPING REPORTS
+------------------------------
+
+- Generate Shipment Report
+- Generate Shipment Preparation Report
+- Generate Shipments By Period Report
+- Generate Remaining Stock Report
+- Generate Brand Inventory Report
+- Generate Returns Report
+
+
+------------------------------
+REPORT ACTIONS
+------------------------------
+
+- Select Brand
+- Select Collection
+- Select Report Type
+- Select Date Range When Needed
+- Generate Report Using AI
+- Preview Report
+- Download PDF
+- Send Report Via WhatsApp
+
+
+==================================================
+MANAGEMENT
+==================================================
+
+
+------------------------------
+DASHBOARD
+------------------------------
+
+- View Overall Statistics
+- View Latest Activities
+- View Orders Overview
+- View Production Status
+- View Delayed Orders
+- View Inventory Overview
+- View Pending Approvals
+
+
+------------------------------
+BRANDS
+------------------------------
+
+- View All Brands
+- View Brand Details
+- View Brand Collections
+- View Brand Orders
+- View Brand Activity
+
+
+------------------------------
+ORDERS FOLLOW-UP
+------------------------------
+
+- Track All Orders
+- View Order Timeline
+- View Collection Status
+- View Production Progress
+- View Order Delays
+- View Order Problems
+
+
+------------------------------
+APPROVALS
+------------------------------
+
+- View Pending Approvals
+- Review Approval Request
+- Approve Request
+- Reject Request
+- Add Decision Note
+
+
+Approval Types:
+
+- Tech Pack
+- Quotation
+- Contract
+- Production Order
+- Other Management Decisions
+
+
+------------------------------
+REPORTS
+------------------------------
+
+- Generate Management Reports
+- View Reports
+- Preview Reports
+- Download PDF Reports
+- Send Reports
+
+
+------------------------------
+KNOWLEDGE BASE
+------------------------------
+
+- Upload Documents
+- View Documents
+- Delete Documents
+- Manage Documents
+- Prepare Documents For AI Knowledge Base
+- Generate Document Embeddings
+- Search Knowledge Base Using RAG
+
+
+------------------------------
+EDITS HISTORY
+------------------------------
+
+- View Activity Log
+- View User Actions
+- View Record Changes
+- Filter By User
+- Filter By Action
+- Filter By Date
+- View Old Data
+- View New Data
+
+
+==================================================
+NOTIFICATIONS
+==================================================
+
+- View Notifications
+- Mark Notification As Read
+- Filter Notifications By Type
+- Filter Notifications By Status
+
+Notifications For:
+
+- Customer Service
+- Planning
+- Management
+- Shipping & Inventory
+
 
 ==================================================
 AI
 ==================================================
 
-  - Generate Tech Pack
-  - Analyze Model Images
-  - Generate Pricing Offer
-  - Detect Missing Data
-  - Suggest Production Timeline
-  - Predict Delays
-  - Generate Customer Reports
-  - Generate Management Reports
-  - Generate WhatsApp Messages
+
+------------------------------
+CUSTOMER SERVICE AI
+------------------------------
+
+- Generate Tech Pack
+- Analyze Model Images
+- Suggest Technical Details
+- Modify Tech Pack
+- Regenerate Tech Pack
+- Generate Pricing Offer Content
+- Detect Missing Collection Data
+
+
+------------------------------
+PLANNING AI
+------------------------------
+
+- Calculate Production Progress
+- Detect Production Delays
+- Predict Expected Delays
+- Analyze Production Problems
+- Suggest Possible Solutions
+
+
+------------------------------
+MANAGEMENT AI
+------------------------------
+
+- Generate Management Reports
+- Analyze Production Performance
+- Analyze Delays
+- Summarize Activity History
+- Detect Important Events
+
+
+------------------------------
+SHIPPING & INVENTORY AI
+------------------------------
+
+- Generate Customer Reports
+- Generate Inventory Reports
+- Generate Shipment Reports
+- Analyze Remaining Stock
+- Generate WhatsApp Messages
+
+
+------------------------------
+GENERAL AI
+------------------------------
+
+- Generate PDF Reports
+- Generate WhatsApp Messages
+- Analyze Uploaded Documents
+- Search Knowledge Base Using RAG
+
 
 ==================================================
-Backend
+BACKEND
 ==================================================
 
-  - Supabase Database
-  - Authentication
-  - Row Level Security
-  - Storage (if needed)
-  - Edge Functions (optional)
+
+------------------------------
+SUPABASE
+------------------------------
+
+- Supabase Database
+- Supabase Authentication
+- Row Level Security
+- Database Relationships
+- Database Constraints
+- Database Functions When Needed
+
+
+------------------------------
+FILE STORAGE
+------------------------------
+
+- Store Model Images
+- Store Brand Logos
+- Store Problem Proof Images
+- Store Progress Images
+- Store Generated Documents
+
+
+------------------------------
+EDGE FUNCTIONS
+------------------------------
+
+- AI API Calls
+- Secure API Operations
+- PDF Generation When Needed
+- WhatsApp Integration When Needed
+
 
 ==================================================
-Automation (n8n)
+AUTOMATION - N8N
 ==================================================
 
-  - AI Workflows
-  - PDF Generation
-  - WhatsApp Messages
-  - Notifications
-  - Scheduled Reports
+- AI Tech Pack Workflow
+- AI Pricing Offer Workflow
+- AI Report Generation
+- PDF Generation
+- WhatsApp Messages
+- Notifications
+- Scheduled Reports
+- Delay Alerts
+- Inventory Notifications

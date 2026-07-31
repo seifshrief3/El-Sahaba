@@ -171,10 +171,13 @@ const CollectionsFromCS = () => {
                 {/* زرار الإجراء (فتح شاشة المراحل) */}
                 <Link
                   to={`/planning/checklist/${col.id}`}
-                  className="w-full bg-slate-50 text-[#1a365d] border border-slate-200 hover:border-red-800 hover:bg-red-800 hover:text-white py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2 mt-auto"
+                  className="w-full bg-slate-50 text-[#1a365d] border border-slate-200 hover:border-[#1a365d] hover:bg-[#1a365d] hover:text-white py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2 mt-auto"
                 >
                   فتح وتحديث المراحل ◀
                 </Link>
+                <button className="w-full bg-red-800 cursor-pointer text-white py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2 mt-2">
+                  تسليم الكولكشن للمخزن ◀
+                </button>
               </div>
             </div>
           ))}

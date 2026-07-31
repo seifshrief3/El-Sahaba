@@ -1,16 +1,15 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { menuItems } from "./MenuItems"; // تأكد إن مسار الملف ده صح عندك
+import { menuItems } from "./MenuItems";
 
 const roleTitles = {
   customer_service: "خدمة العملاء",
   planning: "التخطيط",
-  warehouse: "مخزن منتجات البراندات",
-  shipping: "الشحن",
-  managments: "الإدارة",
+  warehouse: "الشحن و المخزن",
+  management: "الإدارة",
 };
 
-const Sidebar = ({ role = "customer_service", closeSidebar }) => {
+const Sidebar = ({ role, closeSidebar }) => {
   const menu = menuItems[role] || menuItems.customer_service;
 
   return (
@@ -25,7 +24,6 @@ const Sidebar = ({ role = "customer_service", closeSidebar }) => {
           </div>
         </div>
 
-        {/* زرار إغلاق (X) يظهر في الموبايل فقط */}
         <button
           onClick={closeSidebar}
           className="xl:hidden text-white/70 hover:text-white p-2 rounded-lg bg-white/5 transition"

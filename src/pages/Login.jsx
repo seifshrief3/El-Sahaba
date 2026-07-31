@@ -1,6 +1,42 @@
-import React from "react";
+import React, { useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 const Login = () => {
+  const { handleLogin, loading } = useAuth();
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handleSubmit = async (e) => {
+    const result = await handleLogin(e, email, password);
+
+    if (!result.success) {
+      return;
+    }
+
+    switch (result.role) {
+      case "customer_service":
+        navigate("/customer_service");
+        break;
+
+      case "planning":
+        navigate("/planning");
+        break;
+
+      case "management":
+        navigate("/managments");
+        break;
+
+      case "warehouse":
+        navigate("/shipping");
+        break;
+
+      default:
+        alert("User role is not defined");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-200 overflow-hidden">
@@ -11,7 +47,7 @@ const Login = () => {
           </p>
         </div>
 
-        <form className="space-y-5 px-8 py-5">
+        <form className="space-y-5 px-8 py-5" onSubmit={handleSubmit}>
           <div>
             <label className="mb-2 block text-sm font-semibold text-slate-700 text-right">
               البريد الإلكتروني
@@ -21,6 +57,8 @@ const Login = () => {
               placeholder="example@example.com"
               className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-[#002366] focus:ring-2 focus:ring-[#002366]/20"
               required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
           </div>
 
@@ -33,6 +71,8 @@ const Login = () => {
               placeholder="••••••••"
               className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-[#002366] focus:ring-2 focus:ring-[#002366]/20"
               required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
             />
           </div>
 

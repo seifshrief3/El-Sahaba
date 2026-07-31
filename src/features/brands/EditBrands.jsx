@@ -1,11 +1,139 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Link, useParams, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import {
+  handleGetBrandById,
+  handleUpdateBrand,
+} from "../../services/brandsService";
 
 const EditBrands = () => {
+  const { id } = useParams(); // هنجيب الـ ID من الرابط
+  const navigate = useNavigate();
+
+  // 1. States لتخزين البيانات
+  const [formData, setFormData] = useState({
+    name_ar: "",
+    name_en: "",
+    code: "",
+    client_name: "",
+    contact_person: "",
+    phone: "",
+    whatsapp: "",
+    email: "",
+    address: "",
+    activity: "أطفال",
+    status: "active",
+    notes: "",
+    logo_url: "",
+  });
+
+  const [brandCollections, setBrandCollections] = useState([]);
+
+  // States للصورة الجديدة لو هيغيرها
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState("");
+
+  // States للتحميل
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  // 2. جلب البيانات أول ما الصفحة تفتح
+  useEffect(() => {
+    const fetchBrandDetails = async () => {
+      try {
+        const data = await handleGetBrandById(id);
+
+        // تفريغ البيانات في الـ State
+        setFormData(data);
+        setBrandCollections(data.collections || []);
+
+        // لو البراند ليه لوجو قديم، نعرضه في الـ Preview
+        if (data.logo_url) {
+          setLogoPreview(data.logo_url);
+        }
+      } catch (error) {
+        console.error(error);
+        toast.error("حصل خطأ أثناء جلب بيانات البراند.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) fetchBrandDetails();
+  }, [id]);
+
+  // دالة تغيير النصوص
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // دالة اختيار صورة جديدة
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setLogoFile(file);
+      setLogoPreview(URL.createObjectURL(file)); // عرض وهمي مؤقت
+    }
+  };
+
+  // 3. دالة الحفظ
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+
+    try {
+      let finalLogoUrl = formData.logo_url;
+
+      // لو اختار صورة جديدة، نرفعها لـ Cloudinary الأول
+      if (logoFile) {
+        const cloudData = new FormData();
+        cloudData.append("file", logoFile);
+        cloudData.append("upload_preset", "sahaba_uploads");
+
+        const response = await fetch(
+          `https://api.cloudinary.com/v1_1/el-sahaba/auto/upload`,
+          { method: "POST", body: cloudData },
+        );
+
+        const data = await response.json();
+        if (!response.ok)
+          throw new Error(data.error?.message || "فشل رفع الصورة");
+
+        finalLogoUrl = data.secure_url; // اللينك الجديد
+      }
+
+      // الداتا النهائية اللي هتتبعت لـ Supabase
+      const finalData = {
+        ...formData,
+        logo_url: finalLogoUrl,
+      };
+
+      await handleUpdateBrand(id, finalData);
+
+      toast.success("تم تعديل بيانات البراند بنجاح!");
+      // navigate("/customer_service/brands"); // لو حابب ترجعه للصفحة الرئيسية بعد الحفظ شيل الكومنت
+    } catch (error) {
+      console.error(error);
+      toast.error("حصل خطأ أثناء الحفظ، يرجى المحاولة مرة أخرى.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // شاشة تحميل مبدئية
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center font-arabic">
+        جاري تحميل البيانات...
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-10 font-arabic" dir="rtl">
       <div className="max-w-6xl mx-auto flex flex-col gap-6">
-        {/* زرار العودة للبراندات */}
+        {/* زرار العودة */}
         <div className="flex justify-start">
           <Link
             to="/customer_service/brands"
@@ -20,29 +148,82 @@ const EditBrands = () => {
           <div className="mb-6 flex justify-between items-start">
             <div className="text-right flex-1">
               <h2 className="text-2xl font-bold text-[#1a365d] mb-1">
-                تعديل: مدرسة ستانفورد
+                تعديل: {formData.name_ar}
               </h2>
               <p className="text-sm text-slate-500">
-                اسم البراند بالعربية وكود البراند مطلوبين على الأقل. باقي
-                البيانات بتتسحب تلقائياً لأي كولكشن جديد.
+                قم بتحديث بيانات البراند، ولن يؤثر ذلك على أوامر التشغيل
+                السابقة.
               </p>
             </div>
             <div className="mr-auto">
-              <span className="bg-emerald-50 text-emerald-600 border border-emerald-100 px-4 py-1.5 rounded-full text-xs font-bold">
-                نشط
+              <span
+                className={`px-4 py-1.5 rounded-full text-xs font-bold ${
+                  formData.status === "active"
+                    ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                    : "bg-red-50 text-red-600 border border-red-100"
+                }`}
+              >
+                {formData.status === "active" ? "نشط" : "متوقف"}
               </span>
             </div>
           </div>
 
-          <form className="space-y-6 text-right">
+          <form onSubmit={handleSubmit} className="space-y-6 text-right">
             {/* اللوجو */}
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-2">
                 لوجو البراند
               </label>
-              <div className="border-2 border-dashed border-[#1a365d] rounded-xl py-6 text-center cursor-pointer bg-slate-50 hover:bg-slate-100 transition">
-                <p className="text-sm text-slate-500">اضغط لرفع لوجو البراند</p>
-              </div>
+
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                id="fileInput"
+                onChange={handleFileSelect}
+              />
+
+              {logoPreview ? (
+                <div className="flex flex-col items-start gap-2 border border-slate-200 rounded-xl p-4 w-fit bg-slate-50">
+                  <img
+                    src={logoPreview}
+                    alt="Preview"
+                    className="w-24 h-24 object-contain rounded-lg bg-white border border-slate-200"
+                  />
+                  <div className="flex gap-3 mt-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        document.getElementById("fileInput").click()
+                      }
+                      className="text-xs text-[#1a365d] font-bold hover:underline"
+                    >
+                      تغيير
+                    </button>
+                    {/* زرار لحذف اللوجو خالص لو حابب */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLogoFile(null);
+                        setLogoPreview("");
+                        setFormData((prev) => ({ ...prev, logo_url: "" }));
+                      }}
+                      className="text-xs text-[#b91c1c] font-bold hover:underline"
+                    >
+                      إزالة
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onClick={() => document.getElementById("fileInput").click()}
+                  className="border-2 border-dashed border-[#1a365d] rounded-xl py-6 text-center cursor-pointer bg-slate-50 hover:bg-slate-100 transition"
+                >
+                  <p className="text-sm text-slate-500">
+                    اضغط لرفع لوجو البراند
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* الصف الأول */}
@@ -53,7 +234,10 @@ const EditBrands = () => {
                 </label>
                 <input
                   type="text"
-                  defaultValue="مدرسة ستانفورد"
+                  name="name_ar"
+                  required
+                  value={formData.name_ar || ""}
+                  onChange={handleChange}
                   className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -63,26 +247,34 @@ const EditBrands = () => {
                 </label>
                 <input
                   type="text"
+                  name="name_en"
+                  value={formData.name_en || ""}
+                  onChange={handleChange}
                   className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div>
                 <label className="block text-sm text-slate-600 mb-2">
-                  كود البراند
+                  كود البراند *
                 </label>
                 <input
                   type="text"
-                  defaultValue="2284"
+                  name="code"
+                  required
+                  value={formData.code || ""}
+                  onChange={handleChange}
                   className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500 bg-slate-50"
                 />
               </div>
               <div>
                 <label className="block text-sm text-slate-600 mb-2">
-                  اسم العميل / الشركة المالكة
+                  اسم العميل / الشركة
                 </label>
                 <input
                   type="text"
-                  defaultValue="مدرسة ستانفورد"
+                  name="client_name"
+                  value={formData.client_name || ""}
+                  onChange={handleChange}
                   className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -92,6 +284,9 @@ const EditBrands = () => {
                 </label>
                 <input
                   type="text"
+                  name="contact_person"
+                  value={formData.contact_person || ""}
+                  onChange={handleChange}
                   className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -105,6 +300,9 @@ const EditBrands = () => {
                 </label>
                 <input
                   type="text"
+                  name="phone"
+                  value={formData.phone || ""}
+                  onChange={handleChange}
                   className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -114,6 +312,9 @@ const EditBrands = () => {
                 </label>
                 <input
                   type="text"
+                  name="whatsapp"
+                  value={formData.whatsapp || ""}
+                  onChange={handleChange}
                   className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -123,6 +324,9 @@ const EditBrands = () => {
                 </label>
                 <input
                   type="email"
+                  name="email"
+                  value={formData.email || ""}
+                  onChange={handleChange}
                   className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -132,6 +336,9 @@ const EditBrands = () => {
                 </label>
                 <input
                   type="text"
+                  name="address"
+                  value={formData.address || ""}
+                  onChange={handleChange}
                   className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -139,11 +346,16 @@ const EditBrands = () => {
                 <label className="block text-sm text-slate-600 mb-2">
                   نوع النشاط
                 </label>
-                <select className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500 bg-white">
-                  <option>يونيفورم</option>
-                  <option>أطفال</option>
-                  <option>حريمي</option>
-                  <option>رجالي</option>
+                <select
+                  name="activity"
+                  value={formData.activity || "أطفال"}
+                  onChange={handleChange}
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500 bg-white"
+                >
+                  <option value="يونيفورم">يونيفورم</option>
+                  <option value="أطفال">أطفال</option>
+                  <option value="حريمي">حريمي</option>
+                  <option value="رجالي">رجالي</option>
                 </select>
               </div>
             </div>
@@ -154,9 +366,14 @@ const EditBrands = () => {
                 <label className="block text-sm text-slate-600 mb-2">
                   الحالة
                 </label>
-                <select className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500 bg-white">
-                  <option>نشط</option>
-                  <option>متوقف</option>
+                <select
+                  name="status"
+                  value={formData.status || "active"}
+                  onChange={handleChange}
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500 bg-white"
+                >
+                  <option value="active">نشط</option>
+                  <option value="inactive">متوقف</option>
                 </select>
               </div>
             </div>
@@ -167,6 +384,9 @@ const EditBrands = () => {
                 ملاحظات
               </label>
               <textarea
+                name="notes"
+                value={formData.notes || ""}
+                onChange={handleChange}
                 rows="4"
                 className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 resize-none"
               ></textarea>
@@ -174,10 +394,15 @@ const EditBrands = () => {
 
             {/* أزرار الحفظ */}
             <button
-              type="button"
-              className="px-8 py-2.5 rounded-lg text-sm font-bold text-white bg-[#b91c1c] hover:bg-red-800 transition"
+              type="submit"
+              disabled={saving}
+              className={`px-8 py-2.5 rounded-lg text-sm font-bold text-white transition ${
+                saving
+                  ? "bg-slate-400 cursor-not-allowed"
+                  : "bg-[#b91c1c] hover:bg-red-800"
+              }`}
             >
-              حفظ التعديلات
+              {saving ? "جاري الحفظ..." : "حفظ التعديلات"}
             </button>
           </form>
         </div>
@@ -186,24 +411,40 @@ const EditBrands = () => {
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-lg font-bold text-[#1a365d]">
-              الكولكشنات المرتبطة (1)
+              أوامر التشغيل المرتبطة ({brandCollections.length})
             </h3>
           </div>
 
-          {/* عنصر الكولكشن */}
-          <div className="border border-slate-200 rounded-xl p-5 flex justify-between items-center bg-slate-50/50">
-            <div className="text-right">
-              <h4 className="font-bold text-[#1a365d] text-lg">كولكشن 1</h4>
-              <p className="text-sm text-slate-500 mt-1">صيف 2026</p>
-            </div>
-            <div>
-              <Link
-                to={"/customer_service/edit_collection/2"}
-                className="px-8 py-2 rounded-lg text-sm font-bold text-[#1a365d] border border-[#1a365d] hover:bg-blue-50 transition bg-white"
-              >
-                فتح
-              </Link>
-            </div>
+          <div className="space-y-3">
+            {brandCollections.length === 0 ? (
+              <p className="text-sm text-slate-500 text-center py-4">
+                لا توجد أوامر تشغيل مرتبطة بهذا البراند حتى الآن.
+              </p>
+            ) : (
+              brandCollections.map((collection) => (
+                <div
+                  key={collection.id}
+                  className="border border-slate-200 rounded-xl p-5 flex justify-between items-center bg-slate-50/50"
+                >
+                  <div className="text-right">
+                    <h4 className="font-bold text-[#1a365d] text-lg">
+                      {collection.name}
+                    </h4>
+                    <p className="text-sm text-slate-500 mt-1">
+                      الموسم: {collection.season || "غير محدد"}
+                    </p>
+                  </div>
+                  <div>
+                    <Link
+                      to={`/customer_service/edit_collection/${collection.id}`}
+                      className="px-8 py-2 rounded-lg text-sm font-bold text-[#1a365d] border border-[#1a365d] hover:bg-blue-50 transition bg-white"
+                    >
+                      فتح
+                    </Link>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

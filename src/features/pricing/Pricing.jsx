@@ -1,51 +1,178 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { pricingService } from "../../services/pricingService";
 
 const Pricing = () => {
+  const navigate = useNavigate();
   const [view, setView] = useState("list");
-  const [selectedCollection, setSelectedCollection] = useState("");
 
-  // بيانات الموديلات (بدون كميات حسب طلب العميل)
-  const dummyModels = [
-    { id: "2286", name: "موديل 3" },
-    { id: "2287", name: "موديل 4" },
-    { id: "2288", name: "موديل 5" },
-    { id: "2289", name: "موديل 6" },
-    { id: "2290", name: "موديل 7" },
-    { id: "2291", name: "موديل 8" },
-    { id: "2292", name: "موديل 9" },
-  ];
+  // 1. States لإدارة البيانات
+  const [collections, setCollections] = useState([]);
+  const [selectedCollectionId, setSelectedCollectionId] = useState("");
+  const [models, setModels] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // حالة لتخزين التكلفة لكل موديل
+  // 💡 State جديدة عشان نعرف إحنا بنعمل Create ولا Update
+  const [existingQuotationId, setExistingQuotationId] = useState(null);
+
+  // States لبيانات نموذج عرض السعر
   const [costs, setCosts] = useState({});
-  // حالة لنسبة الربح (الافتراضي 15%)
   const [profitMargin, setProfitMargin] = useState(15);
+  const [paymentTerms, setPaymentTerms] = useState(
+    "50% مقدمًا عند الاعتماد، والباقي عند التسليم.",
+  );
+  const [notes, setNotes] = useState("");
 
-  // تحديث التكلفة في الـ State
+  // 2. جلب الكولكشنات
+  useEffect(() => {
+    const loadCollections = async () => {
+      setIsLoading(true);
+      const data = await pricingService.fetchCollections();
+      setCollections(data);
+      setIsLoading(false);
+    };
+    loadCollections();
+  }, []);
+
+  // 3. 💡 جلب الموديلات وبيانات التسعير القديمة (لو موجودة)
+  useEffect(() => {
+    const loadModelsAndQuote = async () => {
+      if (!selectedCollectionId) {
+        setModels([]);
+        setExistingQuotationId(null);
+        return;
+      }
+
+      // جلب الموديلات
+      const modelsData =
+        await pricingService.fetchModelsByCollection(selectedCollectionId);
+      setModels(modelsData);
+
+      // جلب التسعير القديم للكولكشن ده
+      const oldQuote =
+        await pricingService.fetchQuotationByCollection(selectedCollectionId);
+
+      if (oldQuote) {
+        // لو متسعر قبل كده، هنملى الفورم بالبيانات القديمة
+        setExistingQuotationId(oldQuote.id);
+        setPaymentTerms(oldQuote.payment_execution_terms || "");
+        setNotes(oldQuote.notes || "");
+
+        // استخراج تكلفة كل موديل ونسبة الربح
+        const oldCosts = {};
+        let oldProfitMargin = 15;
+
+        if (oldQuote.quotation_items && oldQuote.quotation_items.length > 0) {
+          oldQuote.quotation_items.forEach((item) => {
+            oldCosts[item.model_id] = item.company_cost;
+          });
+          oldProfitMargin = oldQuote.quotation_items[0].profit_percentage; // بناخد نسبة الربح من أول موديل
+        }
+
+        setCosts(oldCosts);
+        setProfitMargin(oldProfitMargin);
+      } else {
+        // لو كولكشن جديد، بنصفر الخانات
+        setExistingQuotationId(null);
+        setCosts({});
+        setProfitMargin(15);
+        setPaymentTerms("50% مقدمًا عند الاعتماد، والباقي عند التسليم.");
+        setNotes("");
+      }
+    };
+
+    loadModelsAndQuote();
+  }, [selectedCollectionId]);
+
+  // 4. العمليات الحسابية التلقائية
   const handleCostChange = (id, value) => {
     const numValue = parseFloat(value) || 0;
     setCosts({ ...costs, [id]: numValue });
   };
 
-  // --- العمليات الحسابية التلقائية ---
-  // 1. إجمالي التكلفة
-  const totalCost = dummyModels.reduce(
+  const totalCost = models.reduce(
     (acc, curr) => acc + (costs[curr.id] || 0),
     0,
   );
-  // 2. متوسط التكلفة
-  const averageCost =
-    dummyModels.length > 0 ? totalCost / dummyModels.length : 0;
-  // 3. سعر البيع النهائي بعد إضافة نسبة الربح
-  const finalSellingPrice = averageCost + (averageCost * profitMargin) / 100;
+  const averageCost = models.length > 0 ? totalCost / models.length : 0;
+  const finalSellingPrice = totalCost + (totalCost * profitMargin) / 100;
+
+  const activeCollection = collections.find(
+    (c) => c.id === selectedCollectionId,
+  );
+
+  // 5. 💡 حفظ أو تحديث عرض السعر
+  const handleSaveQuotation = async () => {
+    if (!selectedCollectionId) {
+      toast.error("برجاء اختيار كولكشن أولاً");
+      return;
+    }
+
+    const unpricedModels = models.filter(
+      (m) => !costs[m.id] || costs[m.id] <= 0,
+    );
+    if (unpricedModels.length > 0) {
+      toast.error("برجاء إدخال التكلفة لجميع الموديلات");
+      return;
+    }
+
+    setIsSubmitting(true);
+    toast.info(
+      existingQuotationId
+        ? "جاري تحديث عرض السعر..."
+        : "جاري إنشاء عرض السعر...",
+    );
+
+    try {
+      const quotationData = {
+        collection_id: selectedCollectionId,
+        total_cost: totalCost,
+        total_sales_price: finalSellingPrice,
+        payment_execution_terms: paymentTerms,
+        notes: notes,
+      };
+
+      const itemsData = models.map((m) => {
+        const cost = costs[m.id] || 0;
+        const sellingPrice = cost + (cost * profitMargin) / 100;
+        return {
+          model_id: m.id,
+          company_cost: cost,
+          profit_percentage: profitMargin,
+          selling_price: sellingPrice,
+        };
+      });
+
+      // تحديد هل بنحدث عرض قديم ولا بنعمل واحد جديد
+      if (existingQuotationId) {
+        await pricingService.updateQuotation(
+          existingQuotationId,
+          quotationData,
+          itemsData,
+        );
+        toast.success("تم تحديث عرض السعر بنجاح! 🔄");
+      } else {
+        await pricingService.createQuotation(quotationData, itemsData);
+        toast.success("تم إنشاء عرض السعر بنجاح! 🎉");
+      }
+
+      setCosts({});
+      navigate("/customer_service/quotations");
+    } catch (error) {
+      toast.error("حدث خطأ أثناء حفظ عرض السعر");
+      console.error(error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div
       className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-10 font-arabic"
       dir="rtl"
     >
-      {/* ========================================================= */}
-      {/* 1. شاشة القائمة الرئيسية */}
-      {/* ========================================================= */}
       {view === "list" && (
         <div className="max-w-6xl mx-auto flex flex-col gap-6">
           <div className="bg-white rounded-2xl p-5 sm:p-6 md:p-8 border border-slate-200 shadow-sm">
@@ -59,124 +186,126 @@ const Pricing = () => {
                   الربح.
                 </p>
               </div>
-              <button
-                onClick={() => setView("form")}
-                className="bg-[#b91c1c] hover:bg-red-800 text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors w-full md:w-auto"
-              >
-                + عرض سعر جديد
-              </button>
+
+              <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                <Link
+                  to="/customer_service/quotations"
+                  className="w-full sm:w-auto bg-slate-50 text-[#1a365d] border border-slate-200 hover:border-[#1a365d] hover:bg-[#1a365d] hover:text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center"
+                >
+                  عرض كل الأسعار
+                </Link>
+                <button
+                  onClick={() => setView("form")}
+                  className="w-full sm:w-auto bg-[#b91c1c] hover:bg-red-800 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center"
+                >
+                  + عرض سعر جديد
+                </button>
+              </div>
             </div>
 
-            <div className="w-full md:w-1/3">
-              <label className="block text-sm text-slate-600 mb-2 font-medium">
-                فلترة بكولكشن
-              </label>
-              <select className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500 bg-white">
-                <option>كل الكولكشنات</option>
-                <option>كولكشن 1</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6">
-            <div className="text-right w-full md:flex-1">
-              <h2 className="text-lg font-bold text-[#1a365d] mb-2">
-                كولكشن 1 — مدرسة ستانفورد
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-500 mb-3">
-                7 موديلات — إجمالي التكلفة 4,200 ج.م — 2026/07/16
-              </p>
-              <span className="bg-orange-50 text-orange-700 border border-orange-100 px-4 py-1.5 rounded-full text-xs font-bold inline-block">
-                مسودة
-              </span>
-            </div>
-            <div className="w-full md:w-auto">
-              <button
-                onClick={() => {
-                  setSelectedCollection("كولكشن 1");
-                  setView("form");
-                }}
-                className="bg-[#b91c1c] hover:bg-red-800 text-white px-8 py-2.5 rounded-lg text-sm font-bold transition-colors w-full md:w-auto"
-              >
-                فتح وتسعير
-              </button>
-            </div>
+            {isLoading ? (
+              <div className="text-center py-10 text-slate-500 font-bold">
+                جاري تحميل البيانات...
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {collections
+                  .filter((col) => col.is_priced)
+                  .slice(0, 3)
+                  .map((col) => (
+                    <div
+                      key={col.id}
+                      className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6"
+                    >
+                      <div className="text-right w-full md:flex-1">
+                        <h2 className="text-lg font-bold text-[#1a365d] mb-2">
+                          {col.name} — {col.brand_name}
+                        </h2>
+                        <p className="text-xs sm:text-sm text-slate-500 mb-3">
+                          تم الإنشاء في:{" "}
+                          {new Date(col.created_at).toLocaleDateString("ar-EG")}
+                        </p>
+                        {col.is_priced ? (
+                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-4 py-1.5 rounded-full text-xs font-bold inline-block">
+                            تم التسعير ✓
+                          </span>
+                        ) : (
+                          <span className="bg-blue-50 text-blue-700 border border-blue-100 px-4 py-1.5 rounded-full text-xs font-bold inline-block">
+                            متاح للتسعير
+                          </span>
+                        )}
+                      </div>
+                      <div className="w-full md:w-auto">
+                        <button
+                          onClick={() => {
+                            setSelectedCollectionId(col.id);
+                            setView("form");
+                          }}
+                          // 💡 تغيير لون وشكل الزرار على حسب هو متسعر قبل كده ولا لأ
+                          className={`${col.is_priced ? "bg-slate-700 hover:bg-slate-800" : "bg-[#b91c1c] hover:bg-red-800"} text-white px-8 py-2.5 rounded-lg text-sm font-bold transition-colors w-full md:w-auto`}
+                        >
+                          {col.is_priced ? "تعديل التسعير" : "فتح وتسعير"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* 2. شاشة إضافة/تعديل عرض سعر */}
-      {/* ========================================================= */}
       {view === "form" && (
         <div className="max-w-6xl mx-auto flex flex-col gap-4 sm:gap-6">
           <div className="flex justify-end">
             <button
               onClick={() => {
                 setView("list");
-                setSelectedCollection("");
+                setSelectedCollectionId("");
               }}
               className="text-[#1a365d] border border-[#1a365d] bg-white px-5 sm:px-6 py-2 rounded-lg text-sm font-bold hover:bg-slate-50 transition flex items-center justify-center gap-2 w-full sm:w-auto"
             >
-              ◀ كل عروض الأسعار
+              ◀ العودة للكولكشنات
             </button>
           </div>
 
           <div className="bg-white rounded-2xl p-5 sm:p-6 md:p-8 border border-slate-200 shadow-sm">
-            {!selectedCollection && (
+            {!selectedCollectionId && (
               <div className="mb-6 sm:mb-8 p-5 sm:p-6 bg-slate-50 rounded-xl border border-slate-200 text-center">
                 <h3 className="text-base sm:text-lg font-bold text-[#1a365d] mb-4">
                   اختار الكولكشن لإنشاء عرض السعر
                 </h3>
                 <select
-                  onChange={(e) => setSelectedCollection(e.target.value)}
+                  value={selectedCollectionId}
+                  onChange={(e) => setSelectedCollectionId(e.target.value)}
                   className="w-full md:w-1/2 mx-auto border border-slate-300 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 bg-white"
                 >
                   <option value="">— اختار كولكشن —</option>
-                  <option value="كولكشن 1">كولكشن 1 — مدرسة ستانفورد</option>
-                  <option value="كولكشن 2">كولكشن 2 — شركة الأمل</option>
+                  {collections.map((col) => (
+                    <option key={col.id} value={col.id}>
+                      {col.name} — {col.brand_name}
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
 
-            {selectedCollection && (
+            {selectedCollectionId && (
               <div className="animate-fade-in">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8 border-b border-slate-100 pb-5 sm:pb-6">
                   <div className="text-right">
                     <h2 className="text-xl sm:text-2xl font-bold text-[#1a365d]">
-                      عرض سعر — {selectedCollection}
+                      {existingQuotationId ? "تعديل عرض سعر" : "إنشاء عرض سعر"}{" "}
+                      — {activeCollection?.name}
                     </h2>
-                    <p className="text-sm text-slate-500 mt-1">
-                      العميل يعتمد الـ Tech Pack وعرض السعر معًا في هذه المرحلة.
-                    </p>
                   </div>
                   <div>
                     <span className="bg-slate-100 text-slate-500 px-4 py-1.5 rounded-full text-xs font-bold border border-slate-200">
-                      قيد التسعير
+                      {existingQuotationId ? "مسعر مسبقاً" : "قيد التسعير"}
                     </span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8 text-right">
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">
-                      البراند
-                    </label>
-                    <p className="font-semibold text-sm sm:text-base text-slate-800">
-                      مدرسة ستانفورد
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">
-                      العميل
-                    </label>
-                    <p className="font-semibold text-sm sm:text-base text-slate-800">
-                      مدرسة ستانفورد
-                    </p>
-                  </div>
-                </div>
-
-                {/* جدول إدخال التكلفة */}
                 <div className="border border-slate-200 rounded-xl overflow-x-auto mb-8">
                   <table className="w-full text-sm text-center min-w-[500px]">
                     <thead className="bg-[#1a365d] text-white">
@@ -190,15 +319,15 @@ const Pricing = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {dummyModels.map((item, index) => (
+                      {models.map((item) => (
                         <tr
-                          key={index}
+                          key={item.id}
                           className="hover:bg-slate-50 transition"
                         >
                           <td className="py-4 px-4 text-slate-700 font-medium text-right whitespace-nowrap">
-                            {item.name}{" "}
+                            {item.name || "بدون اسم"}{" "}
                             <span className="text-slate-400 text-xs">
-                              #{item.id}
+                              #{item.model_number}
                             </span>
                           </td>
                           <td className="py-3 px-4">
@@ -219,16 +348,14 @@ const Pricing = () => {
                   </table>
                 </div>
 
-                {/* الحسابات التلقائية ونسبة الربح */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 mb-8">
                   <h3 className="text-lg font-bold text-[#1a365d] mb-4 text-right">
                     حساب التسعير التلقائي
                   </h3>
-
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-right mb-6">
                     <div className="bg-white p-4 border border-slate-200 rounded-lg shadow-sm">
                       <p className="text-sm text-slate-500 mb-1">
-                        إجمالي تكلفة الموديلات
+                        إجمالي التكلفة
                       </p>
                       <p className="text-xl font-bold text-slate-800">
                         {totalCost.toLocaleString()} ج.م
@@ -236,7 +363,7 @@ const Pricing = () => {
                     </div>
                     <div className="bg-white p-4 border border-slate-200 rounded-lg shadow-sm">
                       <p className="text-sm text-slate-500 mb-1">
-                        متوسط تكلفة الموديل
+                        متوسط التكلفة
                       </p>
                       <p className="text-xl font-bold text-slate-800">
                         {averageCost.toLocaleString(undefined, {
@@ -266,9 +393,7 @@ const Pricing = () => {
                         </button>
                       ))}
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-slate-500">
-                          أو نسبة مخصصة:
-                        </span>
+                        <span className="text-sm text-slate-500">أو نسبة:</span>
                         <input
                           type="number"
                           value={profitMargin}
@@ -284,7 +409,7 @@ const Pricing = () => {
 
                   <div className="bg-[#1a365d] text-white p-5 rounded-lg text-center flex flex-col md:flex-row justify-between items-center">
                     <p className="text-lg font-medium mb-2 md:mb-0">
-                      سعر البيع النهائي المقترح (شامل الربح)
+                      سعر البيع النهائي المقترح
                     </p>
                     <p className="text-2xl font-bold">
                       {finalSellingPrice.toLocaleString(undefined, {
@@ -302,9 +427,10 @@ const Pricing = () => {
                     </label>
                     <textarea
                       rows="3"
-                      defaultValue="50% مقدمًا عند الاعتماد، والباقي عند التسليم."
+                      value={paymentTerms}
+                      onChange={(e) => setPaymentTerms(e.target.value)}
                       className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 resize-none text-slate-700"
-                    ></textarea>
+                    />
                   </div>
                   <div>
                     <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">
@@ -312,21 +438,24 @@ const Pricing = () => {
                     </label>
                     <textarea
                       rows="2"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
                       className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 resize-none"
-                    ></textarea>
+                    />
                   </div>
                 </div>
 
-                {/* أزرار الإجراءات */}
                 <div className="flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100 pt-5 sm:pt-6">
-                  <button className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-colors w-full sm:w-auto">
-                    💬 تجهيز رسالة واتساب
-                  </button>
-                  <button className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-colors w-full sm:w-auto">
-                    📄 إنشاء عرض سعر PDF
-                  </button>
-                  <button className="bg-[#b91c1c] hover:bg-red-800 text-white px-8 py-2.5 rounded-lg text-sm font-bold transition-colors w-full sm:w-auto">
-                    حفظ التعديلات
+                  <button
+                    disabled={models.length === 0 || isSubmitting}
+                    onClick={handleSaveQuotation}
+                    className={`${existingQuotationId ? "bg-slate-700 hover:bg-slate-800" : "bg-[#b91c1c] hover:bg-red-800"} disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-8 py-2.5 rounded-lg text-sm font-bold transition-colors w-full sm:w-auto`}
+                  >
+                    {isSubmitting
+                      ? "جاري الحفظ..."
+                      : existingQuotationId
+                        ? "تحديث عرض السعر"
+                        : "انشاء عرض سعر"}
                   </button>
                 </div>
               </div>

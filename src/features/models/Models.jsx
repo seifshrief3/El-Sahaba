@@ -1,12 +1,35 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import CollectionDetails from "./CollectionDetails";
+import { handleGetCollections } from "../../services/collectionsService"; // تأكد من مسار السيرفيس
 
 const Models = () => {
   const [view, setView] = useState("list");
-  const [selectedCollection, setSelectedCollection] = useState("");
 
-  const handleOpenCollection = (name) => {
-    setSelectedCollection(name);
+  // States للداتا
+  const [collections, setCollections] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // State عشان نشيل الكولكشن اللي تم اختياره بالكامل (مش اسمه بس)
+  const [selectedCollection, setSelectedCollection] = useState(null);
+
+  // جلب الكولكشنات أول ما الصفحة تفتح
+  useEffect(() => {
+    const fetchCollections = async () => {
+      try {
+        const data = await handleGetCollections();
+        setCollections(data);
+      } catch (error) {
+        console.error("Error fetching collections:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCollections();
+  }, []);
+
+  const handleOpenCollection = (collection) => {
+    setSelectedCollection(collection);
     setView("details");
   };
 
@@ -23,40 +46,54 @@ const Models = () => {
               </h1>
             </div>
 
-            <div className="grid gap-5 md:grid-cols-2">
-              {[
-                { id: "COL-1", name: "كولكشن 1", models: 65 },
-                { id: "COL-2", name: "كولكشن الصيف", models: 24 },
-              ].map((col) => (
-                <div
-                  key={col.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex justify-between items-center"
-                >
-                  <div>
-                    <h2 className="text-xl font-bold text-[#1a365d]">
-                      {col.name}
-                    </h2>
-                    <p className="text-sm text-slate-500 mt-1">
-                      {col.models} موديل
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleOpenCollection(col.name)}
-                    className="bg-[#b91c1c] hover:bg-red-800 text-white px-8 py-2.5 rounded-lg text-sm font-bold transition-colors"
+            {loading ? (
+              <div className="text-center p-10 font-bold text-[#1a365d]">
+                جاري تحميل الكولكشنات...
+              </div>
+            ) : collections.length === 0 ? (
+              <div className="text-center p-10 bg-white rounded-xl border border-slate-200 text-slate-500 font-bold">
+                لا يوجد كولكشنات حالية لعرض موديلاتها.
+              </div>
+            ) : (
+              <div className="grid gap-5 md:grid-cols-2">
+                {collections.map((col) => (
+                  <div
+                    key={col.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-wrap gap-3 justify-between items-center transition hover:shadow-md"
                   >
-                    فتح الكولكشن
-                  </button>
-                </div>
-              ))}
-            </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-[#1a365d]">
+                        {col.name}
+                      </h2>
+                      <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
+                        <span>
+                          البراند: {col.brands?.name_ar || "غير محدد"}
+                        </span>
+                        <span className="text-slate-300">•</span>
+                        <span>{col.models_count || 0} موديل</span>
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleOpenCollection(col)}
+                      className="bg-[#b91c1c] hover:bg-red-800 text-white px-8 py-2.5 rounded-lg text-sm font-bold transition-colors"
+                    >
+                      فتح الكولكشن
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* شاشة تفاصيل الموديلات (بتستدعي الكومبوننت اللي عملناه) */}
-        {view === "details" && (
+        {/* شاشة تفاصيل الموديلات */}
+        {view === "details" && selectedCollection && (
           <CollectionDetails
-            collectionName={selectedCollection}
-            onBack={() => setView("list")}
+            collection={selectedCollection} // بعتنا الـ Object كله عشان نقدر نستخدم الـ ID جوه
+            onBack={() => {
+              setView("list");
+              setSelectedCollection(null);
+            }}
           />
         )}
       </div>

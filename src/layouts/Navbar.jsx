@@ -1,6 +1,8 @@
 import React from "react";
+import { useAuth } from "../contexts/AuthContext";
 
 const Navbar = ({ toggleSidebar }) => {
+  const { user, handleLogout } = useAuth();
   return (
     <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-4 sm:px-6 lg:px-8 shadow-sm z-30">
       <div className="flex items-center gap-4">
@@ -40,9 +42,12 @@ const Navbar = ({ toggleSidebar }) => {
           🔔
         </button>
         <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-bold text-[#1a365d] hidden sm:block">
-          سارة أحمد
+          {user?.email}
         </div>
-        <button className="rounded-lg border border-slate-200 bg-white px-3 sm:px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 transition">
+        <button
+          onClick={handleLogout}
+          className="rounded-lg border border-slate-200 bg-white px-3 sm:px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 transition"
+        >
           تسجيل الخروج
         </button>
       </div>
