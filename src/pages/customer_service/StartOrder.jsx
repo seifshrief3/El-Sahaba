@@ -7,10 +7,11 @@ import ContractPDFTemplate from "../../components/ContractPDFTemplate";
 import {
   handleGetCollectionById,
   handleIssueOrderToPlanning,
-} from "../../services/collectionsService"; // 💡 تم استيراد دالة الإصدار
+} from "../../services/collectionsService";
 import { pricingService } from "../../services/pricingService";
 import { toast } from "sonner";
-
+import { notificationService } from "../../services/notificationService";
+import { sendForApproval } from "../../services/approvalsService";
 const StartOrder = () => {
   const { id } = useParams();
   const navigate = useNavigate(); // 💡 تعريف الـ navigate
@@ -19,7 +20,7 @@ const StartOrder = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false); // 💡 State لمنع تكرار الضغط
   const [seriesCount, setSeriesCount] = useState(5);
-
+  const [isSendingContract, setIsSendingApproval] = useState(false);
   // Refs للطباعة
   const workOrderRef = useRef(null);
   const contractRef = useRef(null);
@@ -160,6 +161,12 @@ const StartOrder = () => {
 
       toast.success(
         "تم إصدار أمر التشغيل بنجاح! 🚀 تم تسجيل البيانات وإرسالها للمصنع.",
+      );
+      await notificationService.sendNotification(
+        "planning",
+        "أمر تشغيل جديد 🏭",
+        `تم إصدار أمر تشغيل جديد لكولكشن: ${collectionInfo.collectionName}، بانتظار استلامك.`,
+        id,
       );
       navigate("/customer_service/customer_followup");
     } catch (error) {
@@ -400,6 +407,50 @@ const StartOrder = () => {
                 className={`${isSubmitting ? "bg-slate-400 cursor-not-allowed" : "bg-[#b91c1c] hover:bg-red-800"} text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto`}
               >
                 {isSubmitting ? "جاري الإصدار..." : "حفظ وإصدار للتخطيط"}
+              </button>
+              {/* الزرار الجديد لاعتماد العقد */}
+              <button
+                onClick={async () => {
+                  // 1. التحقق من عدد السريهات
+                  if (seriesCount <= 0) {
+                    toast.error(
+                      "برجاء تحديد عدد السريهات أولاً لإنشاء العقد بشكل صحيح.",
+                    );
+                    return;
+                  }
+
+                  // 2. التحقق من التسعير (مينفعش نعمل عقد لمنتج ملوش سعر)
+                  const hasUnpricedModels = collectionInfo.models.some(
+                    (m) => !m.approvedPrice || m.approvedPrice <= 0,
+                  );
+                  if (hasUnpricedModels) {
+                    toast.error(
+                      "لا يمكن إرسال العقد! هناك موديلات لم يتم تسعيرها واعتمادها بعد.",
+                    );
+                    return;
+                  }
+
+                  setIsSendingApproval(true);
+                  try {
+                    // 3. كتابة تفاصيل العقد في الملاحظة عشان تظهر للمدير في صفحة الموافقات
+                    const contractDetails = `مطلوب اعتماد عقد تصنيع بعدد (${seriesCount} سري). إجمالي الكمية: ${grandTotalQty} قطعة.`;
+
+                    await sendForApproval(id, "contract", contractDetails);
+                    toast.success("تم إرسال العقد للمدير للاعتماد");
+                  } catch (error) {
+                    toast.error(error.message || "حدث خطأ أثناء الإرسال");
+                  } finally {
+                    setIsSendingApproval(false);
+                  }
+                }}
+                disabled={isSendingContract}
+                className={`${
+                  isSendingContract
+                    ? "bg-slate-400 cursor-not-allowed"
+                    : "bg-emerald-600 hover:bg-emerald-700"
+                } text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto`}
+              >
+                {isSendingContract ? "جاري الإرسال..." : "إرسال العقد للاعتماد"}
               </button>
             </div>
           </div>

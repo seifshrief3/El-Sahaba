@@ -238,20 +238,30 @@ export const pricingService = {
         .select(`
           model_number,
           image_url,
-          tech_packs ( content ) 
+          tech_packs ( content ),
+          collections ( department )
         `)
         .eq("collection_id", collectionId);
 
       if (error) throw error;
 
       let specs = {
-        category: "أولادي",
+        category: "أولادي", // لاسم المنتج (هودي، إلخ)
+        department: "غير محدد", // 💡 للفئة (رجالي، حريمي)
         main_fabric: "ميلتون مكستر",
         fabric_weight: "330 جرام",
         sizes: "6 / 8 / 10 / 12 / 14"
       };
 
       if (modelsData && modelsData.length > 0) {
+        // 💡 التعديل هنا: رجعناها department زي الصورة بالظبط
+        const collectionRelation = modelsData[0].collections || modelsData[0].collection;
+        const collectionDept = collectionRelation?.department;
+
+        if (collectionDept) {
+          specs.department = collectionDept;
+        }
+
         const firstTechPack = modelsData[0].tech_packs;
         const techPackContent = Array.isArray(firstTechPack)
           ? firstTechPack[0]?.content
@@ -286,7 +296,7 @@ export const pricingService = {
       };
     } catch (err) {
       console.error("Error fetching details for PDF:", err);
-      return { models: [], category: "-", main_fabric: "-", fabric_weight: "-", sizes: "-" };
+      return { models: [], category: "-", department: "-", main_fabric: "-", fabric_weight: "-", sizes: "-" };
     }
   },
 
@@ -314,6 +324,44 @@ export const pricingService = {
       return true;
     } catch (err) {
       console.error("Error updating quotation status:", err);
+      throw err;
+    }
+  },
+
+  // ... باقي الدوال اللي فوق ...
+
+  // 9. 💡 دالة حذف عرض السعر بالكامل
+  deleteQuotation: async (quotationId) => {
+    try {
+      // 1. مسح العناصر المرتبطة (quotation_items) الأول عشان نتجنب خطأ الـ Foreign Key
+      const { error: itemsError } = await supabase
+        .from("quotation_items")
+        .delete()
+        .eq("quotation_id", quotationId);
+
+      if (itemsError) throw itemsError;
+
+      // 2. مسح عرض السعر الأساسي (quotation)
+      const { error: quoteError } = await supabase
+        .from("quotations")
+        .delete()
+        .eq("id", quotationId);
+
+      if (quoteError) throw quoteError;
+
+      // 3. 💡 تسجيل حدث الحذف في الـ Logs
+      await addSystemLog({
+        module: "customer_service",
+        action_type: "DELETE",
+        entity_type: "quotation",
+        entity_id: quotationId,
+        title: "حذف عرض سعر",
+        description: "تم حذف عرض السعر وجميع العناصر المرتبطة به.",
+      });
+
+      return true;
+    } catch (err) {
+      console.error("Error deleting quotation:", err);
       throw err;
     }
   },

@@ -156,7 +156,8 @@ const Brands = () => {
                 </p>
                 <div className="flex gap-3 items-center">
                   <Link
-                    to={`/customer_service/edit_brands/${brand.id}`}
+                    // التعديل هنا: بنجيب المسار الحالي وبنغير كلمة brands بـ edit_brands
+                    to={`${window.location.pathname.replace("/brands", "")}/edit_brands/${brand.id}`}
                     className="rounded-lg bg-slate-100 border border-slate-200 px-6 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-200 hover:text-[#1a365d]"
                   >
                     فتح

@@ -33,7 +33,6 @@ const DownloadPDFButton = ({ collection }) => {
     return map[status] || status || "---";
   };
 
-  // قاموس لترجمة مفاتيح الـ BOM
   const bomTranslations = {
     rib: "الريب (Rib)",
     threads: "الخيوط",
@@ -128,7 +127,6 @@ const DownloadPDFButton = ({ collection }) => {
                 .filter(Boolean);
         }
 
-        // 💡 استخراج التفاصيل التقنية الدقيقة من الـ Tech Pack
         const bom = tpContent?.bill_of_materials_BOM || {};
         const techDesc = tpContent?.technical_description || {};
         const qualityChecks = Array.isArray(tpContent?.quality_check_points)
@@ -184,9 +182,6 @@ const DownloadPDFButton = ({ collection }) => {
         {isDownloading ? "جاري التجهيز..." : "🖨️ طباعة / تحميل PDF"}
       </button>
 
-      {/* ========================================== */}
-      {/* القالب المخفي للطباعة (PDF Template) */}
-      {/* ========================================== */}
       <div style={{ display: "none" }}>
         <div
           ref={pdfTemplateRef}
@@ -196,17 +191,18 @@ const DownloadPDFButton = ({ collection }) => {
         >
           <style>
             {`
-              @page { size: A4 portrait; margin: 0; }
+              @page { size: A4 portrait; margin: 10mm; }
               @media print {
+                html, body { margin: 0 !important; padding: 0 !important; background: white; }
                 body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                .page-break-avoid { page-break-inside: avoid; }
-                .page-break-before { page-break-before: always; }
+                .page-break-avoid { page-break-inside: avoid; break-inside: avoid; }
+                .page-break-before { page-break-before: always; break-before: page; }
               }
             `}
           </style>
 
           {/* الصفحة الأولى: الغلاف والملخص */}
-          <div className="min-h-[297mm] relative bg-white">
+          <div className="bg-white pb-10 flex flex-col min-h-[90vh]">
             <div className="bg-[#1a365d] text-white p-10 border-b-[6px] border-[#b91c1c] flex justify-between items-center">
               <div>
                 <h1 className="text-4xl font-black mb-2">
@@ -234,8 +230,7 @@ const DownloadPDFButton = ({ collection }) => {
               </div>
             </div>
 
-            <div className="p-10">
-              {/* بيانات العميل */}
+            <div className="p-10 flex-1">
               <div className="mb-8">
                 <h3 className="text-xl font-bold text-[#b91c1c] border-b-2 border-slate-200 pb-2 mb-4 flex items-center gap-2">
                   <span className="bg-[#b91c1c] w-2 h-6 rounded-full inline-block"></span>
@@ -264,7 +259,6 @@ const DownloadPDFButton = ({ collection }) => {
                 </div>
               </div>
 
-              {/* المواصفات الفنية للطلبية */}
               <div className="mb-8">
                 <h3 className="text-xl font-bold text-[#b91c1c] border-b-2 border-slate-200 pb-2 mb-4 flex items-center gap-2">
                   <span className="bg-[#b91c1c] w-2 h-6 rounded-full inline-block"></span>
@@ -330,7 +324,6 @@ const DownloadPDFButton = ({ collection }) => {
                 </div>
               </div>
 
-              {/* حالة التشغيل والموافقات */}
               <div className="mb-8">
                 <h3 className="text-xl font-bold text-[#b91c1c] border-b-2 border-slate-200 pb-2 mb-4 flex items-center gap-2">
                   <span className="bg-[#b91c1c] w-2 h-6 rounded-full inline-block"></span>
@@ -393,19 +386,19 @@ const DownloadPDFButton = ({ collection }) => {
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="absolute bottom-6 left-10 right-10 border-t border-slate-200 pt-4 text-center text-xs font-bold text-slate-400">
-              تم استخراج هذا الملف من نظام الصحابة ERP بتاريخ{" "}
-              {new Date().toLocaleDateString("ar-EG")}
+              <div className="mt-10 border-t border-slate-200 pt-4 text-center text-xs font-bold text-slate-400">
+                تم استخراج هذا الملف من نظام الصحابة ERP بتاريخ{" "}
+                {new Date().toLocaleDateString("ar-EG")}
+              </div>
             </div>
           </div>
 
           {/* ------------------------------------------------ */}
-          {/* الصفحات التالية: التفاصيل العميقة للموديلات (Tech Pack) */}
+          {/* التفاصيل العميقة للموديلات (بدون تقييد الطول لتجنب الصفحات الفارغة) */}
           {/* ------------------------------------------------ */}
           {models.length > 0 && (
-            <div className="page-break-before bg-white min-h-[297mm]">
+            <div className="page-break-before bg-white">
               <div className="bg-[#1a365d] text-white py-6 px-10 border-b-[4px] border-[#b91c1c]">
                 <h2 className="text-2xl font-black">
                   التفاصيل الفنية العميقة (Tech Pack)
@@ -416,10 +409,10 @@ const DownloadPDFButton = ({ collection }) => {
                 {models.map((model, index) => (
                   <div
                     key={index}
-                    className="page-break-avoid mb-10 bg-white border border-slate-300 rounded-2xl overflow-hidden shadow-sm"
+                    // 💡 تم إزالة page-break-avoid من الحاوية الرئيسية لعدم إجبار الصفحة على الانقسام المبكر
+                    className="mb-10 bg-white border border-slate-300 rounded-2xl overflow-hidden shadow-sm"
                   >
-                    {/* شريط عنوان الموديل */}
-                    <div className="bg-slate-100 px-6 py-4 border-b border-slate-300 flex justify-between items-center">
+                    <div className="bg-slate-100 px-6 py-4 border-b border-slate-300 flex justify-between items-center page-break-avoid">
                       <h3 className="text-lg font-black text-[#1a365d]">
                         موديل رقم:{" "}
                         <span className="text-[#b91c1c] ml-2">
@@ -432,8 +425,7 @@ const DownloadPDFButton = ({ collection }) => {
                     </div>
 
                     <div className="p-6 flex flex-col md:flex-row gap-6">
-                      {/* صورة الموديل */}
-                      <div className="w-48 h-64 bg-white border border-slate-200 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center p-2 relative shadow-sm">
+                      <div className="w-48 h-64 bg-white border border-slate-200 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center p-2 relative shadow-sm page-break-avoid">
                         {model.image_url ? (
                           <img
                             src={model.image_url}
@@ -457,10 +449,8 @@ const DownloadPDFButton = ({ collection }) => {
                         </div>
                       </div>
 
-                      {/* تفاصيل الـ Tech Pack المستخرجة */}
                       <div className="flex-1 flex flex-col gap-4">
-                        {/* 1. المواصفات الأساسية */}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 gap-3 page-break-avoid">
                           <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
                             <span className="text-[11px] text-slate-500 block mb-1">
                               الخامة الأساسية:
@@ -488,10 +478,9 @@ const DownloadPDFButton = ({ collection }) => {
                           </div>
                         </div>
 
-                        {/* 2. الوصف الفني والتصنيع (Technical Description) */}
                         {model.techDesc &&
                           Object.keys(model.techDesc).length > 0 && (
-                            <div className="border-t border-slate-200 pt-3">
+                            <div className="border-t border-slate-200 pt-3 page-break-avoid">
                               <p className="text-[13px] text-[#b91c1c] font-black mb-1">
                                 الوصف الفني والتصنيع:
                               </p>
@@ -536,9 +525,8 @@ const DownloadPDFButton = ({ collection }) => {
                             </div>
                           )}
 
-                        {/* 3. قائمة الخامات (BOM) */}
                         {model.bom && Object.keys(model.bom).length > 0 && (
-                          <div className="border-t border-slate-200 pt-3">
+                          <div className="border-t border-slate-200 pt-3 page-break-avoid">
                             <p className="text-[13px] text-[#b91c1c] font-black mb-2">
                               المستلزمات وقائمة الخامات (BOM):
                             </p>
@@ -569,8 +557,7 @@ const DownloadPDFButton = ({ collection }) => {
                           </div>
                         )}
 
-                        {/* 4. الجودة والعناية والملاحظات */}
-                        <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-3">
+                        <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-3 page-break-avoid">
                           {model.qualityChecks?.length > 0 && (
                             <div>
                               <p className="text-[12px] text-[#b91c1c] font-black mb-1">
@@ -599,7 +586,7 @@ const DownloadPDFButton = ({ collection }) => {
                         </div>
 
                         {model.techComments && (
-                          <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg mt-1">
+                          <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg mt-1 page-break-avoid">
                             <p className="text-[11px] text-amber-800 font-black mb-1">
                               ملاحظات تقنية من مهندس التخطيط:
                             </p>

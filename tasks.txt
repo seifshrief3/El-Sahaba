@@ -124,32 +124,32 @@ CLIENT APPROVALS
 PRODUCTION ORDER / START ORDER
 ------------------------------
 
-- Open Collection For Production Order
-- Select Required Sizes
-- Select Quantity Distribution
-- Use Saved Quantity Distribution
-- Automatically Calculate Quantity Per Model
-- Automatically Calculate Quantity Per Size
-- Automatically Calculate Total Collection Quantity
-- Automatically Calculate Total Order Value
-- Generate Production Order
-- Generate Collection Contract
-- Preview Contract
-- Send Contract To Client
-- Issue Production Order
-- Send Production Order To Planning
+- Open Collection For Production Order => DONE
+- Select Required Sizes => DONE
+- Select Quantity Distribution => DONE
+- Use Saved Quantity Distribution => DONE
+- Automatically Calculate Quantity Per Model => DONE
+- Automatically Calculate Quantity Per Size => DONE
+- Automatically Calculate Total Collection Quantity => DONE
+- Automatically Calculate Total Order Value => DONE
+- Generate Production Order => DONE
+- Generate Collection Contract => DONE
+- Preview Contract PDF
+- Send Contract To Client => DONE
+- Issue Production Order => DONE
+- Send Production Order To Planning => DONE
 
 
 ------------------------------
 ORDER MANAGEMENT
 ------------------------------
 
-- View Collection Order Status
-- Start Order
-- Pause Order
-- Resume Order
-- Cancel Order
-- Track Order Status
+- View Collection Order Status => DONE
+- Start Order => DONE
+- Pause Order => DONE
+- Resume Order => DONE
+- Cancel Order => DONE
+- Track Order Status => DONE
 
 
 ==================================================
@@ -161,36 +161,34 @@ PLANNING
 INCOMING ORDERS
 ------------------------------
 
-- View Orders Sent From Customer Service
-- Receive Production Order
-- Open Collection Details
-- View Models
-- View Model Images
-- View Approved Tech Packs
-- View Required Quantities
+- View Orders Sent From Customer Service => DONE
+- Receive Production Order => DONE
+- Open Collection Details => DONE
+- View Models Ready For Production
+- View Model Images Ready For Production
+- View Approved Tech Packs => DONE
+- View Required Quantities => DONE
 
 
 ------------------------------
 COLLECTIONS
 ------------------------------
 
-- View All Active Collections
-- Open Collection
-- View All Models
-- View Production Stages
+- View All Active Collections => DONE
+- Open Collection Details => DONE
+- View All Models In Collection => DONE
+- View Production Stages => DONE
 
 
 ------------------------------
 PRODUCTION STAGE UPDATES
 ------------------------------
 
-- Mark Stage As Not Started
-- Mark Stage As In Progress
-- Mark Stage As Completed
-- Mark Stage As Problem
-- Add Problem Note
-- Upload Problem Proof Image
-
+- Mark Stage As Not Started Yet => DONE
+- Mark Stage As In Progress When Needed => DONE
+- Mark Stage As Completed When Needed => DONE
+- Mark Stage As Problem When Needed => DONE
+- Add Problem Note When Needed => DONE
 
 ------------------------------
 PRODUCTION PROGRESS

@@ -75,7 +75,11 @@ export const AuthProvider = ({ children }) => {
 
       setUser(loggedInUser);
 
-      const userRole = loggedInUser.app_metadata?.role ?? null;
+      // 💡 التعديل هنا: قراءة الصلاحية من user_metadata للعملاء أو app_metadata للموظفين
+      const userRole =
+        loggedInUser.user_metadata?.role ||
+        loggedInUser.app_metadata?.role ||
+        null;
 
       setRole(userRole);
 

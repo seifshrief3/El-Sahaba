@@ -99,6 +99,7 @@ const Quotations = () => {
         ...quote,
         models: details.models,
         category: details.category,
+        department: details.department,
         main_fabric: details.main_fabric,
         fabric_weight: details.fabric_weight,
         sizes: details.sizes,

@@ -64,6 +64,7 @@ import Reports from "./pages/managments/Reports";
 import OrdersFollowup from "./pages/managments/OrdersFollowup";
 import Approvals from "./pages/managments/Approvals";
 
+import ClientDashboard from "./pages/ClientDashboard";
 function App() {
   return (
     <Routes>
@@ -333,6 +334,24 @@ function App() {
         />
 
         <Route
+          path="/managments/edit_brands/:id"
+          element={
+            <DashboardLayout>
+              <EditBrands />
+            </DashboardLayout>
+          }
+        />
+
+        <Route
+          path="/managments/edit_collection/:id"
+          element={
+            <DashboardLayout>
+              <EditCollection />
+            </DashboardLayout>
+          }
+        />
+
+        <Route
           path="/managments/orders_followup"
           element={
             <DashboardLayout>
@@ -378,6 +397,7 @@ function App() {
         />
       </Route>
 
+      <Route path="/client-portal/*" element={<ClientDashboard />} />
       {/* =========================
           404
       ========================= */}

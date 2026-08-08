@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import {
   handleGetBrandById,
@@ -7,10 +7,10 @@ import {
 } from "../../services/brandsService";
 
 const EditBrands = () => {
-  const { id } = useParams(); // هنجيب الـ ID من الرابط
+  const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation(); // لمعرفة المسار الحالي
 
-  // 1. States لتخزين البيانات
   const [formData, setFormData] = useState({
     name_ar: "",
     name_en: "",
@@ -28,26 +28,23 @@ const EditBrands = () => {
   });
 
   const [brandCollections, setBrandCollections] = useState([]);
-
-  // States للصورة الجديدة لو هيغيرها
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState("");
-
-  // States للتحميل
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // 2. جلب البيانات أول ما الصفحة تفتح
+  // دالة لمعرفة الـ Root Path الحالي بناءً على الرابط
+  const getBasePath = () => {
+    if (location.pathname.includes("/managments")) return "/managments";
+    return "/customer_service";
+  };
+
   useEffect(() => {
     const fetchBrandDetails = async () => {
       try {
         const data = await handleGetBrandById(id);
-
-        // تفريغ البيانات في الـ State
         setFormData(data);
         setBrandCollections(data.collections || []);
-
-        // لو البراند ليه لوجو قديم، نعرضه في الـ Preview
         if (data.logo_url) {
           setLogoPreview(data.logo_url);
         }
@@ -62,22 +59,19 @@ const EditBrands = () => {
     if (id) fetchBrandDetails();
   }, [id]);
 
-  // دالة تغيير النصوص
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // دالة اختيار صورة جديدة
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (file) {
       setLogoFile(file);
-      setLogoPreview(URL.createObjectURL(file)); // عرض وهمي مؤقت
+      setLogoPreview(URL.createObjectURL(file));
     }
   };
 
-  // 3. دالة الحفظ
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -85,7 +79,6 @@ const EditBrands = () => {
     try {
       let finalLogoUrl = formData.logo_url;
 
-      // لو اختار صورة جديدة، نرفعها لـ Cloudinary الأول
       if (logoFile) {
         const cloudData = new FormData();
         cloudData.append("file", logoFile);
@@ -100,19 +93,17 @@ const EditBrands = () => {
         if (!response.ok)
           throw new Error(data.error?.message || "فشل رفع الصورة");
 
-        finalLogoUrl = data.secure_url; // اللينك الجديد
+        finalLogoUrl = data.secure_url;
       }
 
-      // الداتا النهائية اللي هتتبعت لـ Supabase
       const finalData = {
         ...formData,
         logo_url: finalLogoUrl,
       };
 
       await handleUpdateBrand(id, finalData);
-
       toast.success("تم تعديل بيانات البراند بنجاح!");
-      // navigate("/customer_service/brands"); // لو حابب ترجعه للصفحة الرئيسية بعد الحفظ شيل الكومنت
+      // navigate(`${getBasePath()}/brands`);
     } catch (error) {
       console.error(error);
       toast.error("حصل خطأ أثناء الحفظ، يرجى المحاولة مرة أخرى.");
@@ -121,7 +112,6 @@ const EditBrands = () => {
     }
   };
 
-  // شاشة تحميل مبدئية
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center font-arabic">
@@ -133,10 +123,10 @@ const EditBrands = () => {
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-10 font-arabic" dir="rtl">
       <div className="max-w-6xl mx-auto flex flex-col gap-6">
-        {/* زرار العودة */}
+        {/* زرار العودة - اللينك ديناميكي */}
         <div className="flex justify-start">
           <Link
-            to="/customer_service/brands"
+            to={`${getBasePath()}/brands`}
             className="text-slate-500 hover:text-slate-800 text-sm font-bold flex items-center gap-2"
           >
             ◀ رجوع للبراندات
@@ -174,7 +164,6 @@ const EditBrands = () => {
               <label className="block text-sm font-medium text-slate-600 mb-2">
                 لوجو البراند
               </label>
-
               <input
                 type="file"
                 accept="image/*"
@@ -182,7 +171,6 @@ const EditBrands = () => {
                 id="fileInput"
                 onChange={handleFileSelect}
               />
-
               {logoPreview ? (
                 <div className="flex flex-col items-start gap-2 border border-slate-200 rounded-xl p-4 w-fit bg-slate-50">
                   <img
@@ -200,7 +188,6 @@ const EditBrands = () => {
                     >
                       تغيير
                     </button>
-                    {/* زرار لحذف اللوجو خالص لو حابب */}
                     <button
                       type="button"
                       onClick={() => {
@@ -226,7 +213,7 @@ const EditBrands = () => {
               )}
             </div>
 
-            {/* الصف الأول */}
+            {/* باقي الفورم */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div>
                 <label className="block text-sm text-slate-600 mb-2">
@@ -292,7 +279,6 @@ const EditBrands = () => {
               </div>
             </div>
 
-            {/* الصف الثاني */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div>
                 <label className="block text-sm text-slate-600 mb-2">
@@ -360,7 +346,6 @@ const EditBrands = () => {
               </div>
             </div>
 
-            {/* الصف الثالث */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div>
                 <label className="block text-sm text-slate-600 mb-2">
@@ -378,7 +363,6 @@ const EditBrands = () => {
               </div>
             </div>
 
-            {/* الملاحظات */}
             <div>
               <label className="block text-sm text-slate-600 mb-2">
                 ملاحظات
@@ -392,15 +376,10 @@ const EditBrands = () => {
               ></textarea>
             </div>
 
-            {/* أزرار الحفظ */}
             <button
               type="submit"
               disabled={saving}
-              className={`px-8 py-2.5 rounded-lg text-sm font-bold text-white transition ${
-                saving
-                  ? "bg-slate-400 cursor-not-allowed"
-                  : "bg-[#b91c1c] hover:bg-red-800"
-              }`}
+              className={`px-8 py-2.5 rounded-lg text-sm font-bold text-white transition ${saving ? "bg-slate-400 cursor-not-allowed" : "bg-[#b91c1c] hover:bg-red-800"}`}
             >
               {saving ? "جاري الحفظ..." : "حفظ التعديلات"}
             </button>
@@ -435,8 +414,9 @@ const EditBrands = () => {
                     </p>
                   </div>
                   <div>
+                    {/* التعديل الأهم هنا: اللينك ديناميكي حسب القسم */}
                     <Link
-                      to={`/customer_service/edit_collection/${collection.id}`}
+                      to={`${getBasePath()}/edit_collection/${collection.id}`}
                       className="px-8 py-2 rounded-lg text-sm font-bold text-[#1a365d] border border-[#1a365d] hover:bg-blue-50 transition bg-white"
                     >
                       فتح

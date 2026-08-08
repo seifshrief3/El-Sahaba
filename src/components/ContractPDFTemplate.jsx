@@ -19,8 +19,6 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
     model.sizes.forEach((s) => allSizes.add(s));
   });
 
-  console.log(data);
-
   const advancePayment = grandTotalValue / 2;
   const remainingPayment = grandTotalValue / 2;
 

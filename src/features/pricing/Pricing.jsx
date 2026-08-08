@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { pricingService } from "../../services/pricingService";
-
+import { sendForApproval } from "../../services/approvalsService";
 const Pricing = () => {
   const navigate = useNavigate();
   const [view, setView] = useState("list");
@@ -13,8 +13,9 @@ const Pricing = () => {
   const [models, setModels] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // 💡 State جديدة عشان نعرف إحنا بنعمل Create ولا Update
+  const [isDeleting, setIsDeleting] = useState(false); // 💡 State لزرار الحذف
+  const [isSendingApproval, setIsSendingApproval] = useState(false);
+  // State لمعرفة إحنا بنعمل Create ولا Update
   const [existingQuotationId, setExistingQuotationId] = useState(null);
 
   // States لبيانات نموذج عرض السعر
@@ -26,17 +27,18 @@ const Pricing = () => {
   const [notes, setNotes] = useState("");
 
   // 2. جلب الكولكشنات
+  const loadCollections = async () => {
+    setIsLoading(true);
+    const data = await pricingService.fetchCollections();
+    setCollections(data);
+    setIsLoading(false);
+  };
+
   useEffect(() => {
-    const loadCollections = async () => {
-      setIsLoading(true);
-      const data = await pricingService.fetchCollections();
-      setCollections(data);
-      setIsLoading(false);
-    };
     loadCollections();
   }, []);
 
-  // 3. 💡 جلب الموديلات وبيانات التسعير القديمة (لو موجودة)
+  // 3. جلب الموديلات وبيانات التسعير القديمة
   useEffect(() => {
     const loadModelsAndQuote = async () => {
       if (!selectedCollectionId) {
@@ -45,22 +47,18 @@ const Pricing = () => {
         return;
       }
 
-      // جلب الموديلات
       const modelsData =
         await pricingService.fetchModelsByCollection(selectedCollectionId);
       setModels(modelsData);
 
-      // جلب التسعير القديم للكولكشن ده
       const oldQuote =
         await pricingService.fetchQuotationByCollection(selectedCollectionId);
 
       if (oldQuote) {
-        // لو متسعر قبل كده، هنملى الفورم بالبيانات القديمة
         setExistingQuotationId(oldQuote.id);
         setPaymentTerms(oldQuote.payment_execution_terms || "");
         setNotes(oldQuote.notes || "");
 
-        // استخراج تكلفة كل موديل ونسبة الربح
         const oldCosts = {};
         let oldProfitMargin = 15;
 
@@ -68,13 +66,12 @@ const Pricing = () => {
           oldQuote.quotation_items.forEach((item) => {
             oldCosts[item.model_id] = item.company_cost;
           });
-          oldProfitMargin = oldQuote.quotation_items[0].profit_percentage; // بناخد نسبة الربح من أول موديل
+          oldProfitMargin = oldQuote.quotation_items[0].profit_percentage;
         }
 
         setCosts(oldCosts);
         setProfitMargin(oldProfitMargin);
       } else {
-        // لو كولكشن جديد، بنصفر الخانات
         setExistingQuotationId(null);
         setCosts({});
         setProfitMargin(15);
@@ -103,7 +100,7 @@ const Pricing = () => {
     (c) => c.id === selectedCollectionId,
   );
 
-  // 5. 💡 حفظ أو تحديث عرض السعر
+  // 5. حفظ أو تحديث عرض السعر (بدون إرسال تلقائي)
   const handleSaveQuotation = async () => {
     if (!selectedCollectionId) {
       toast.error("برجاء اختيار كولكشن أولاً");
@@ -145,7 +142,6 @@ const Pricing = () => {
         };
       });
 
-      // تحديد هل بنحدث عرض قديم ولا بنعمل واحد جديد
       if (existingQuotationId) {
         await pricingService.updateQuotation(
           existingQuotationId,
@@ -155,16 +151,51 @@ const Pricing = () => {
         toast.success("تم تحديث عرض السعر بنجاح! 🔄");
       } else {
         await pricingService.createQuotation(quotationData, itemsData);
-        toast.success("تم إنشاء عرض السعر بنجاح! 🎉");
+        toast.success(
+          "تم إنشاء وحفظ عرض السعر بنجاح! 🎉 الآن يمكنك إرساله للإدارة.",
+        );
+
+        // إعادة تحميل البيانات عشان السيستم يلقط الـ ID الجديد ويفعل زرار الإرسال
+        const oldQuote =
+          await pricingService.fetchQuotationByCollection(selectedCollectionId);
+        if (oldQuote) setExistingQuotationId(oldQuote.id);
       }
 
-      setCosts({});
-      navigate("/customer_service/quotations");
+      // 💡 تم إزالة كود الإرسال التلقائي من هنا
+      // 💡 وتم إزالة الـ navigate عشان الموظف يفضل في الصفحة ويدوس إرسال براحته
     } catch (error) {
       toast.error("حدث خطأ أثناء حفظ عرض السعر");
       console.error(error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // 6. 💡 دالة حذف التسعير
+  const handleDeleteQuotation = async (collectionId) => {
+    const confirmDelete = window.confirm(
+      "هل أنت متأكد من حذف عرض السعر لهذا الكولكشن بالكامل؟ لا يمكن التراجع عن هذا الإجراء.",
+    );
+    if (!confirmDelete) return;
+
+    setIsDeleting(true);
+    try {
+      // بنجيب الـ quote القديم الأول عشان نعرف الـ ID بتاعه
+      const oldQuote =
+        await pricingService.fetchQuotationByCollection(collectionId);
+      if (oldQuote && oldQuote.id) {
+        await pricingService.deleteQuotation(oldQuote.id);
+        toast.success("تم حذف عرض السعر بنجاح!");
+        // نعيد تحميل الكولكشنات عشان يتحدث شكل الزرار
+        await loadCollections();
+      } else {
+        toast.error("لم يتم العثور على عرض السعر");
+      }
+    } catch (error) {
+      toast.error("حدث خطأ أثناء حذف عرض السعر");
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -235,14 +266,28 @@ const Pricing = () => {
                           </span>
                         )}
                       </div>
-                      <div className="w-full md:w-auto">
+
+                      {/* 💡 زراير التعديل والحذف هنا */}
+                      <div className="w-full md:w-auto flex flex-col sm:flex-row gap-2">
+                        {col.is_priced && (
+                          <button
+                            onClick={() => handleDeleteQuotation(col.id)}
+                            disabled={isDeleting}
+                            className="bg-red-50 text-[#b91c1c] border border-red-100 hover:bg-red-100 hover:border-red-200 px-4 py-2.5 rounded-lg text-sm font-bold transition-colors w-full sm:w-auto disabled:opacity-50"
+                          >
+                            حذف التسعير
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             setSelectedCollectionId(col.id);
                             setView("form");
                           }}
-                          // 💡 تغيير لون وشكل الزرار على حسب هو متسعر قبل كده ولا لأ
-                          className={`${col.is_priced ? "bg-slate-700 hover:bg-slate-800" : "bg-[#b91c1c] hover:bg-red-800"} text-white px-8 py-2.5 rounded-lg text-sm font-bold transition-colors w-full md:w-auto`}
+                          className={`${
+                            col.is_priced
+                              ? "bg-slate-700 hover:bg-slate-800"
+                              : "bg-[#b91c1c] hover:bg-red-800"
+                          } text-white px-8 py-2.5 rounded-lg text-sm font-bold transition-colors w-full sm:w-auto`}
                         >
                           {col.is_priced ? "تعديل التسعير" : "فتح وتسعير"}
                         </button>
@@ -255,6 +300,7 @@ const Pricing = () => {
         </div>
       )}
 
+      {/* ... باقي الكود الخاص بـ view === "form" زي ما هو بدون تغيير ... */}
       {view === "form" && (
         <div className="max-w-6xl mx-auto flex flex-col gap-4 sm:gap-6">
           <div className="flex justify-end">
@@ -449,13 +495,42 @@ const Pricing = () => {
                   <button
                     disabled={models.length === 0 || isSubmitting}
                     onClick={handleSaveQuotation}
-                    className={`${existingQuotationId ? "bg-slate-700 hover:bg-slate-800" : "bg-[#b91c1c] hover:bg-red-800"} disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-8 py-2.5 rounded-lg text-sm font-bold transition-colors w-full sm:w-auto`}
+                    className={`${
+                      existingQuotationId
+                        ? "bg-slate-700 hover:bg-slate-800"
+                        : "bg-[#b91c1c] hover:bg-red-800"
+                    } disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-8 py-2.5 rounded-lg text-sm font-bold transition-colors w-full sm:w-auto`}
                   >
                     {isSubmitting
                       ? "جاري الحفظ..."
                       : existingQuotationId
                         ? "تحديث عرض السعر"
-                        : "انشاء عرض سعر"}
+                        : "انشاء وحفظ عرض السعر"}
+                  </button>
+
+                  {/* 💡 زرار الإرسال للإدارة - مش هيشتغل غير لو existingQuotationId موجود (يعني متسجل في الداتابيز) */}
+                  <button
+                    disabled={!existingQuotationId || isSendingApproval}
+                    onClick={async () => {
+                      setIsSendingApproval(true);
+                      try {
+                        await sendForApproval(
+                          selectedCollectionId,
+                          "quotation",
+                          "برجاء مراجعة عرض السعر واعتماده",
+                        );
+                        toast.success("تم إرسال عرض السعر للمدير للاعتماد");
+                      } catch (error) {
+                        toast.error(error.message || "حدث خطأ أثناء الإرسال");
+                      } finally {
+                        setIsSendingApproval(false);
+                      }
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-8 py-2.5 rounded-lg text-sm font-bold transition-colors w-full sm:w-auto"
+                  >
+                    {isSendingApproval
+                      ? "جاري الإرسال..."
+                      : "إرسال للمدير للاعتماد"}
                   </button>
                 </div>
               </div>

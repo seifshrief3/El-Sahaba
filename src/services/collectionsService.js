@@ -133,105 +133,71 @@ export const handleUpdateCustomerApproval = async (collectionId, approvalStatus)
 
 export const handleIssueOrderToPlanning = async (collectionInfo, seriesCount) => {
   try {
-    // 1. تحديث حالة الكولكشن
-    await supabase
-      .from("collections")
-      .update({
-        customer_approval: "in_production",
-        status: "active"
-      })
-      .eq("id", collectionInfo.id);
-
-    // 2. حساب الإجماليات
     let grandTotalQty = 0;
-    let grandTotalValue = 0;
-    collectionInfo.models.forEach(m => {
-      const qty = m.sizes.length * m.colors.length * seriesCount;
-      grandTotalQty += qty;
-      grandTotalValue += qty * m.approvedPrice;
+    let grandTotalAmount = 0;
+
+    // 1. حساب الإجماليات الأول
+    collectionInfo.models.forEach((model) => {
+      const modelQty = model.sizes.length * model.colors.length * seriesCount;
+      grandTotalQty += modelQty;
+      grandTotalAmount += modelQty * (model.approvedPrice || 0);
     });
 
-    // 3. إنشاء أمر التشغيل الرئيسي
-    const orderNumber = `PO-${collectionInfo.brandCode}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-    const { data: productionOrder, error: poError } = await supabase
+    // 2. تحديث أمر التشغيل الرئيسي (production_orders) بالكميات والفلوس
+    const { data: orderData, error: orderError } = await supabase
       .from("production_orders")
-      .insert({
+      .upsert({
         collection_id: collectionInfo.id,
-        order_number: orderNumber,
-        status: 'sent_to_planning',
+        status: "pending",
         total_quantity: grandTotalQty,
-        total_amount: grandTotalValue,
-        sent_to_planning_at: new Date().toISOString()
-      })
+        total_amount: grandTotalAmount,
+        order_number: `PO-${collectionInfo.brandCode}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+      }, { onConflict: "collection_id" })
       .select()
       .single();
 
-    if (poError) throw poError;
+    if (orderError) throw orderError;
+    const orderId = orderData.id;
 
-    // 4. جلب المقاسات من الداتابيز
-    const { data: dbSizes, error: sizesError } = await supabase.from("sizes").select("id, name");
-    if (sizesError) throw sizesError;
-
-    // 5. إدخال الموديلات والمقاسات التفصيلية
+    // 3. إدخال تفاصيل الموديلات والألوان (production_order_items)
     for (const model of collectionInfo.models) {
-      const modelQty = model.sizes.length * model.colors.length * seriesCount;
+      for (const color of model.colors) {
+        // كمية اللون ده = عدد المقاسات × السريهات
+        const colorQty = model.sizes.length * seriesCount;
 
-      const { data: poItem, error: itemError } = await supabase
-        .from("production_order_items")
-        .insert({
-          production_order_id: productionOrder.id,
-          model_id: model.real_id,
-          selling_price: model.approvedPrice,
-          total_quantity: modelQty
-        })
-        .select()
-        .single();
+        const { data: itemData, error: itemError } = await supabase
+          .from("production_order_items")
+          .insert({
+            production_order_id: orderId,
+            model_id: model.real_id || model.id,
+            color: color,
+            total_quantity: colorQty,
+            selling_price: model.approvedPrice || 0
+          })
+          .select()
+          .single();
 
-      if (itemError) throw itemError;
+        if (itemError) throw itemError;
+        const itemId = itemData.id;
 
-      const itemSizesToInsert = [];
-      const qtyPerSize = seriesCount * model.colors.length;
+        // 4. إدخال المقاسات في جدولها (production_order_item_sizes)
+        // ⚠️ ملاحظة مهمة: بناءً على صورتك عمود المقاس اسمه size_id (لو هو بياخد نص زي 'M' أو 'L' الكود هيشتغل)
+        // لو الداتابيز رافضة عشان نوعه UUID، غير نوع العمود في Supabase لـ Text وسميه size
+        const sizesData = model.sizes.map((size) => ({
+          production_order_item_id: itemId,
+          size_id: size,
+          quantity: seriesCount
+        }));
 
-      for (const sizeName of model.sizes) {
-        const matchedSize = dbSizes.find(s => s.name.toLowerCase() === sizeName.toLowerCase());
-
-        if (matchedSize) {
-          itemSizesToInsert.push({
-            production_order_item_id: poItem.id,
-            size_id: matchedSize.id,
-            quantity: qtyPerSize
-          });
-        } else {
-          console.warn(`المقاس ${sizeName} غير موجود في جدول sizes بقاعدة البيانات!`);
-        }
-      }
-
-      if (itemSizesToInsert.length > 0) {
-        const { error: itemSizesError } = await supabase
+        const { error: sizesError } = await supabase
           .from("production_order_item_sizes")
-          .insert(itemSizesToInsert);
+          .insert(sizesData);
 
-        if (itemSizesError) throw itemSizesError;
+        if (sizesError) throw sizesError;
       }
     }
 
-    // 💡 تسجيل حدث إصدار أمر التشغيل (أكشن مهم جداً)
-    await addSystemLog({
-      module: "customer_service", // أو "planning" حسب ما تحب تصنفها
-      action_type: "STATUS_CHANGE",
-      entity_type: "production_order",
-      entity_id: productionOrder.id,
-      title: "إصدار أمر تشغيل",
-      description: `تم إصدار أمر تشغيل رقم (${orderNumber}) للكولكشن "${collectionInfo.collectionName}" وإرساله للتخطيط والمصنع.`,
-      details: {
-        order_number: orderNumber,
-        total_quantity: grandTotalQty,
-        series_count: seriesCount
-      }
-    });
-
-    return productionOrder;
+    return orderData;
   } catch (error) {
     console.error("Error issuing order to planning:", error);
     throw error;

@@ -1,6 +1,7 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
 import { menuItems } from "./MenuItems";
+import logo from "../assets/logo.jpeg"; // 💡 استدعاء اللوجو هنا
 
 const roleTitles = {
   customer_service: "خدمة العملاء",
@@ -13,14 +14,28 @@ const Sidebar = ({ role, closeSidebar }) => {
   const menu = menuItems[role] || menuItems.customer_service;
 
   return (
-    <aside className="h-full min-h-screen bg-blue-950 text-white overflow-y-auto flex flex-col">
+    <aside
+      className="h-full min-h-screen bg-blue-950 text-white overflow-y-auto flex flex-col font-arabic"
+      dir="rtl"
+    >
+      {/* 💡 التعديل هنا: إضافة اللوجو وتنسيقه في الهيدر */}
       <div className="border-b border-white/10 px-6 py-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* حاوية اللوجو */}
+          <div className="bg-white rounded-xl p-1 shrink-0 shadow-sm">
+            <img
+              src={logo}
+              alt="الصحابة"
+              className="w-12 h-12 object-contain rounded-lg"
+            />
+          </div>
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">
+            <p className="text-xs tracking-widest text-slate-300 font-bold">
               نظام الصحابة
             </p>
-            <h1 className="mt-2 text-lg font-bold">{roleTitles[role]}</h1>
+            <h1 className="mt-1 text-lg font-black text-white">
+              {roleTitles[role]}
+            </h1>
           </div>
         </div>
 
@@ -55,7 +70,7 @@ const Sidebar = ({ role, closeSidebar }) => {
               className={({ isActive }) =>
                 `block rounded-xl px-4 py-3 text-sm font-bold transition ${
                   isActive
-                    ? "bg-white text-blue-950"
+                    ? "bg-white text-blue-950 shadow-sm"
                     : "text-slate-200 hover:bg-white/10 hover:text-white"
                 }`
               }

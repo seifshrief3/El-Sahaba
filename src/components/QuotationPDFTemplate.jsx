@@ -3,9 +3,8 @@ import logoImage from "../assets/logo.jpeg";
 
 const QuotationPDFTemplate = React.forwardRef(({ data }, ref) => {
   if (!data) return null;
-
-  const models =
-    data.models && data.models.length > 0 ? data.models : defaultModels;
+  console.log(data);
+  const models = data.models && data.models.length > 0 ? data.models : [];
   const finalPrice = data.finalPrice || 0;
   const brandName = data.brand || "---";
   const collectionName = data.collection || "---";
@@ -103,17 +102,22 @@ const QuotationPDFTemplate = React.forwardRef(({ data }, ref) => {
                 <table className="w-full border-collapse border-2 border-[#0f172a] text-center text-sm">
                   <tbody>
                     {[
-                      { label: "اسم المنتج", value: collectionName },
+                      // 1. اسم المنتج هياخد اللي متسجل في التيك باك (زي كلمة هودي)
                       {
-                        label: "رقم الموديل",
-                        value: models.map((m) => m.model_number).join(" / "),
+                        label: "اسم المنتج",
+                        value: data.category || "منتج مجمع",
                       },
+
+                      { label: "رقم الموديل", value: "-" },
                       { label: "اسم البراند", value: brandName },
-                      { label: "الفئة", value: category },
+
+                      // 💡 2. الفئة هنا هتقرأ المتغير اللي جبناه من جدول collections
+                      { label: "الفئة", value: data.department || "غير محدد" },
+
                       { label: "نوع الخامة", value: mainFabric },
                       { label: "وزن الخامة", value: fabricWeight },
                       { label: "المقاسات", value: sizes },
-                      { label: "الحد الأدنى للتصنيع", value: minQty },
+                      { label: "الحد الأدنى للتصنيع", value: "-" },
                     ].map((row, idx) => (
                       <tr key={idx} className="border-b border-[#0f172a]">
                         <th className="border-l border-[#0f172a] py-1.5 px-2 bg-slate-50 text-[#0f172a] w-1/3">
