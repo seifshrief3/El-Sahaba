@@ -43,6 +43,9 @@ const Login = () => {
 
     // توجيه المستخدم حسب دوره
     switch (result.role) {
+      case "admin": // 💡 الحساب الشامل
+        navigate("/managments");
+        break;
       case "customer_service":
         navigate("/customer_service");
         break;

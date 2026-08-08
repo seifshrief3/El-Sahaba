@@ -15,21 +15,34 @@ export const AuthProvider = ({ children }) => {
   // Get Current User
   // =========================
 
+  // =========================
+  // Get Current User (معدل عشان يستنى الـ session)
+  // =========================
   useEffect(() => {
+    let isMounted = true;
+
     const getCurrentUser = async () => {
+      // التأكد من استلام الـ session قبل أي حاجة
       const {
         data: { session },
+        error,
       } = await supabase.auth.getSession();
 
-      const currentUser = session?.user ?? null;
-
-      setUser(currentUser);
-
-      if (currentUser) {
-        setRole(currentUser.app_metadata?.role ?? null);
+      if (isMounted) {
+        if (session) {
+          setUser(session.user);
+          // 💡 تعديل هام: قراءة الدور من المكان الصحيح
+          setRole(
+            session.user.app_metadata?.role ||
+              session.user.user_metadata?.role ||
+              null,
+          );
+        } else {
+          setUser(null);
+          setRole(null);
+        }
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     getCurrentUser();
@@ -38,20 +51,20 @@ export const AuthProvider = ({ children }) => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      const currentUser = session?.user ?? null;
-
-      setUser(currentUser);
-
-      if (currentUser) {
-        setRole(currentUser.app_metadata?.role ?? null);
-      } else {
-        setRole(null);
+      if (isMounted) {
+        setUser(session?.user ?? null);
+        setRole(
+          session?.user
+            ? session.user.app_metadata?.role ||
+                session.user.user_metadata?.role
+            : null,
+        );
+        setLoading(false);
       }
-
-      setLoading(false);
     });
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
   }, []);

@@ -1,9 +1,9 @@
 import { supabase } from "../../supabase";
 import { notificationService } from "./notificationService";
 
-// 💡 ضفنا modelId كمتغير اختياري في الدالة
 export const sendForApproval = async (collectionId, type, note, modelId = null) => {
   try {
+    // 💡 إدخال صف جديد دايماً كطلب مستقل
     const { data, error } = await supabase.from('approvals').insert([
       {
         collection_id: collectionId,
@@ -15,12 +15,14 @@ export const sendForApproval = async (collectionId, type, note, modelId = null) 
     ]);
 
     if (error) {
+      // لو نسينا نمسح القيد من الداتابيز، الكود هينبهنا
       if (error.code === '23505') {
-        throw new Error("تم إرسال هذا الطلب مسبقاً وهو قيد المراجعة.");
+        throw new Error("لا يمكن إضافة الطلب. يرجى مسح قيد عدم التكرار (Unique Constraint) من جدول approvals في Supabase.");
       }
       throw error;
     }
 
+    // إرسال الإشعار للمدير 
     let typeName = type === 'tech_pack' ? 'بطاقة فنية' : type === 'quotation' ? 'عرض سعر' : 'عقد عمل';
     await notificationService.sendNotification(
       "management",
