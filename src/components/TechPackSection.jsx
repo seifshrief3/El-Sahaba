@@ -202,7 +202,7 @@ const TechPackSection = ({
           style={{ textAlign: "right" }}
         >
           <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
-          المساعد الذكي: اطلب أي تعديل على التصميم، المقاسات، أو الخامات...
+          المساعد الذكي: اطلب أي تعديل على الالوان، المقاسات، أو الخامات...
         </p>
 
         <div className="space-y-3 mb-4 max-h-48 overflow-y-auto">

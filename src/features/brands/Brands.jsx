@@ -1,17 +1,16 @@
 import React, { useEffect, useState } from "react";
 import AddNewBrand from "../../Modals/AddNewBrand";
-import { Link } from "react-router-dom";
 import {
   handleGetAllBrands,
   handleDeleteBrand,
 } from "../../services/brandsService";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
-
+import { Link, useLocation } from "react-router-dom";
 const Brands = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [brands, setBrands] = useState([]);
-
+  const location = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -156,8 +155,8 @@ const Brands = () => {
                 </p>
                 <div className="flex gap-3 items-center">
                   <Link
-                    // التعديل هنا: بنجيب المسار الحالي وبنغير كلمة brands بـ edit_brands
-                    to={`${window.location.pathname.replace("/brands", "")}/edit_brands/${brand.id}`}
+                    // 💡 هنا بنقص الرابط من عند آخر "/" ونحط المسار الجديد مباشرة
+                    to={`${location.pathname.substring(0, location.pathname.lastIndexOf("/"))}/edit_brands/${brand.id}`}
                     className="rounded-lg bg-slate-100 border border-slate-200 px-6 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-200 hover:text-[#1a365d]"
                   >
                     فتح

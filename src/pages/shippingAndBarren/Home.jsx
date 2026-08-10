@@ -74,7 +74,7 @@ const Home = () => {
             `
             id, updated_at, created_at,
             collections ( name, brands ( name_ar ) ),
-            production_order_items ( quantity )
+            production_order_items ( total_quantity )
           `,
           )
           .eq("status", "completed");
@@ -89,7 +89,7 @@ const Home = () => {
 
           const totalQty =
             order.production_order_items?.reduce(
-              (s, i) => s + (i.quantity || 0),
+              (s, i) => s + (i.total_quantity || 0),
               0,
             ) || 0;
 

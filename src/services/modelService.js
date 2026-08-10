@@ -16,7 +16,7 @@ export const handleGetModelsByCollectionId = async (collectionId) => {
 };
 
 export const handleUpdateModelAndGenerateTechPack = async (modelId, payload) => {
-  // 1. تحديث بيانات الموديل الأساسية وتغيير الحالة لـ generating
+  console.log("Here is the Payload: ", payload);
   const { data, error } = await supabase
     .from("models")
     .update({
@@ -51,6 +51,7 @@ export const handleUpdateModelAndGenerateTechPack = async (modelId, payload) => 
       body: JSON.stringify({
         action: "create",
         model_id: modelId,
+        collection_id: payload.collection_id,
         brand_name: payload.brand_name,
         name: payload.name,
         image_url: payload.image_url,
@@ -103,77 +104,38 @@ export const handleUpdateModelAndGenerateTechPack = async (modelId, payload) => 
 };
 
 export const handleUpdateModelRelations = async (modelId, fabrics, selectedSizes) => {
-  // ==========================================
-  // أولاً: تنظيف العلاقات القديمة 
-  // ==========================================
+  // 1. تنظيف العلاقات القديمة 
   await supabase.from('model_sizes').delete().eq('model_id', modelId);
   await supabase.from('model_materials').delete().eq('model_id', modelId);
 
-  // ==========================================
-  // ثانياً: معالجة وحفظ المقاسات
-  // ==========================================
+  // 2. معالجة وحفظ المقاسات
   if (selectedSizes && selectedSizes.length > 0) {
     for (const sizeName of selectedSizes) {
-      let { data: sizeRecord } = await supabase
-        .from('sizes')
-        .select('id')
-        .eq('name', sizeName)
-        .single();
-
-      let sizeId;
-      if (sizeRecord) {
-        sizeId = sizeRecord.id;
-      } else {
-        const { data: newSize } = await supabase
-          .from('sizes')
-          .insert({ name: sizeName })
-          .select()
-          .single();
-        sizeId = newSize.id;
-      }
-
-      await supabase.from('model_sizes').insert({
-        model_id: modelId,
-        size_id: sizeId
-      });
+      let cleanSize = sizeName.trim(); // 👈 تأمين
+      let { data: sizeRecord } = await supabase.from('sizes').select('id').eq('name', cleanSize).single();
+      let sizeId = sizeRecord ? sizeRecord.id : (await supabase.from('sizes').insert({ name: cleanSize }).select().single()).data.id;
+      await supabase.from('model_sizes').insert({ model_id: modelId, size_id: sizeId });
     }
   }
 
-  // ==========================================
-  // ثالثاً: معالجة وحفظ الخامات
-  // ==========================================
+  // 3. معالجة وحفظ الخامات
   if (fabrics && fabrics.length > 0) {
     for (const fabric of fabrics) {
-      if (!fabric.name) continue;
+      if (!fabric.name || fabric.name.trim() === "") continue;
 
-      let { data: materialRecord } = await supabase
-        .from('materials')
-        .select('id')
-        .eq('name', fabric.name)
-        .single();
-
-      let materialId;
-      if (materialRecord) {
-        materialId = materialRecord.id;
-      } else {
-        const { data: newMaterial } = await supabase
-          .from('materials')
-          .insert({ name: fabric.name })
-          .select()
-          .single();
-        materialId = newMaterial.id;
-      }
+      let cleanFabric = fabric.name.trim(); // 👈 تأمين ضد المسافات
+      let { data: materialRecord } = await supabase.from('materials').select('id').eq('name', cleanFabric).single();
+      let materialId = materialRecord ? materialRecord.id : (await supabase.from('materials').insert({ name: cleanFabric }).select().single()).data.id;
 
       await supabase.from('model_materials').insert({
         model_id: modelId,
         material_id: materialId,
-        weight: fabric.weight || null,
+        weight: fabric.weight ? fabric.weight.trim() : null,
         notes: null
       });
     }
   }
 
-  // 💡 تسجيل تحديث تفاصيل المقاسات والخامات
   await addSystemLog({
     module: "customer_service",
     action_type: "UPDATE",

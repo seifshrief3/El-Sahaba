@@ -80,8 +80,17 @@ const CollectionDetails = ({ collection, onBack }) => {
     try {
       const activeModel = modelsData.find((m) => m.id === activeModelId);
 
-      const { id, created_at, updated_at, tech_pack_status, ...restData } =
-        activeModel;
+      // 💡 التعديل هنا: استثنينا hasError وأي علاقات (زي tech_packs) عشان الداتابيز ماترفضش
+      const {
+        id,
+        created_at,
+        updated_at,
+        tech_pack_status,
+        hasError,
+        tech_packs,
+        quotation_items,
+        ...restData
+      } = activeModel;
 
       const duplicatedPayload = {
         ...restData,

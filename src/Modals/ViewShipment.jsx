@@ -55,6 +55,18 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
   const fetchShipmentDetails = async () => {
     setIsLoading(true);
     try {
+      // 💡 1. سحب المقاسات عشان نعمل قاموس الترجمة
+      const { data: sizesData } = await supabase
+        .from("sizes")
+        .select("id, name");
+      const sizeMap = {};
+      if (sizesData) {
+        sizesData.forEach((s) => {
+          sizeMap[s.id] = s.name; // ربط الـ UUID بالاسم
+        });
+      }
+
+      // 2. سحب بيانات الشحنة
       const { data, error } = await supabase
         .from("shipments")
         .select(
@@ -83,6 +95,19 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
         .single();
 
       if (error) throw error;
+
+      // 💡 3. ترجمة المقاسات جوه الداتا قبل ما نعرضها
+      if (data && data.shipment_items) {
+        data.shipment_items = data.shipment_items.map((item) => {
+          if (item.inventory) {
+            // إضافة خاصية جديدة فيها الاسم الحقيقي للمقاس
+            item.inventory.realSizeName =
+              sizeMap[item.inventory.size] || item.inventory.size;
+          }
+          return item;
+        });
+      }
+
       setShipmentDetails(data);
     } catch (error) {
       console.error("Error fetching shipment details:", error);
@@ -281,7 +306,8 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
                             </td>
                             <td className="p-4 font-semibold text-slate-600">
                               {item.inventory?.color} / مقاس{" "}
-                              {item.inventory?.size}
+                              {/* 💡 استخدام المقاس المترجم هنا */}
+                              {item.inventory?.realSizeName}
                             </td>
                             <td className="p-4 font-bold text-[#1a365d]">
                               {item.quantity}
@@ -481,7 +507,9 @@ const PrintableShipmentReceipt = forwardRef(({ shipment, logo }, ref) => {
                   {item.inventory?.models?.name}
                 </td>
                 <td className="border border-slate-300 p-2.5 text-slate-600">
-                  {item.inventory?.color} / مقاس {item.inventory?.size}
+                  {item.inventory?.color} / مقاس{" "}
+                  {/* 💡 استخدام المقاس المترجم هنا في البوليصة */}
+                  {item.inventory?.realSizeName}
                 </td>
                 <td className="border border-slate-300 p-2.5 text-center font-bold text-[#1a365d]">
                   {item.quantity} قطعة

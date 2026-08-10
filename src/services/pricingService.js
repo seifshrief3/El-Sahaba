@@ -236,67 +236,207 @@ export const pricingService = {
       const { data: modelsData, error } = await supabase
         .from("models")
         .select(`
-          model_number,
-          image_url,
-          tech_packs ( content ),
-          collections ( department )
-        `)
+        model_number,
+        image_url,
+        tech_packs ( content ),
+        collections ( department )
+      `)
         .eq("collection_id", collectionId);
 
       if (error) throw error;
 
       let specs = {
-        category: "أولادي", // لاسم المنتج (هودي، إلخ)
-        department: "غير محدد", // 💡 للفئة (رجالي، حريمي)
+        category: "أولادي",
+        department: "غير محدد",
         main_fabric: "ميلتون مكستر",
         fabric_weight: "330 جرام",
-        sizes: "6 / 8 / 10 / 12 / 14"
+        sizes: []
       };
 
+      // ============================================
+      // تجميع المقاسات من جميع الموديلات
+      // ============================================
+
+      const allSizes = [];
+
       if (modelsData && modelsData.length > 0) {
-        // 💡 التعديل هنا: رجعناها department زي الصورة بالظبط
-        const collectionRelation = modelsData[0].collections || modelsData[0].collection;
+        // ============================================
+        // Department من الـ Collection
+        // ============================================
+
+        const collectionRelation =
+          modelsData[0].collections || modelsData[0].collection;
+
         const collectionDept = collectionRelation?.department;
 
         if (collectionDept) {
           specs.department = collectionDept;
         }
 
-        const firstTechPack = modelsData[0].tech_packs;
-        const techPackContent = Array.isArray(firstTechPack)
-          ? firstTechPack[0]?.content
-          : firstTechPack?.content;
+        // ============================================
+        // المرور على كل الموديلات
+        // ============================================
 
-        if (techPackContent) {
-          const info = techPackContent.basic_info || techPackContent;
+        modelsData.forEach((model) => {
+          const techPack = model.tech_packs;
 
-          if (info.category && info.category !== '-') specs.category = info.category;
-          else if (info.target_audience && info.target_audience !== '-') specs.category = info.target_audience;
+          const techPackContent = Array.isArray(techPack)
+            ? techPack[0]?.content
+            : techPack?.content;
 
-          if (info.main_fabric && info.main_fabric !== '-') specs.main_fabric = info.main_fabric;
-          else if (info.fabric_type && info.fabric_type !== '-') specs.main_fabric = info.fabric_type;
-          else if (info.material && info.material !== '-') specs.main_fabric = info.material;
+          if (!techPackContent) return;
 
-          if (info.fabric_weight && info.fabric_weight !== '-') specs.fabric_weight = info.fabric_weight;
-          else if (info.weight && info.weight !== '-') specs.fabric_weight = info.weight;
+          const info =
+            techPackContent.basic_info || techPackContent;
 
-          if (info.size_range && info.size_range !== '-') specs.sizes = info.size_range;
-          else if (info.sizes && info.sizes !== '-') specs.sizes = info.sizes;
-        }
+          // ============================================
+          // Category
+          // ============================================
+
+          if (
+            specs.category === "أولادي" &&
+            info.category &&
+            info.category !== "-"
+          ) {
+            specs.category = info.category;
+          } else if (
+            specs.category === "أولادي" &&
+            info.target_audience &&
+            info.target_audience !== "-"
+          ) {
+            specs.category = info.target_audience;
+          }
+
+          // ============================================
+          // Fabric
+          // ============================================
+
+          if (
+            specs.main_fabric === "ميلتون مكستر" &&
+            info.main_fabric &&
+            info.main_fabric !== "-"
+          ) {
+            specs.main_fabric = info.main_fabric;
+          } else if (
+            specs.main_fabric === "ميلتون مكستر" &&
+            info.fabric_type &&
+            info.fabric_type !== "-"
+          ) {
+            specs.main_fabric = info.fabric_type;
+          } else if (
+            specs.main_fabric === "ميلتون مكستر" &&
+            info.material &&
+            info.material !== "-"
+          ) {
+            specs.main_fabric = info.material;
+          }
+
+          // ============================================
+          // Fabric Weight
+          // ============================================
+
+          if (
+            specs.fabric_weight === "330 جرام" &&
+            info.fabric_weight &&
+            info.fabric_weight !== "-"
+          ) {
+            specs.fabric_weight = info.fabric_weight;
+          } else if (
+            specs.fabric_weight === "330 جرام" &&
+            info.weight &&
+            info.weight !== "-"
+          ) {
+            specs.fabric_weight = info.weight;
+          }
+
+          // ============================================
+          // SIZES - من كل موديل
+          // ============================================
+
+          let modelSizes = [];
+
+          if (
+            info.size_range &&
+            info.size_range !== "-"
+          ) {
+            modelSizes = info.size_range;
+          } else if (
+            info.sizes &&
+            info.sizes !== "-"
+          ) {
+            modelSizes = info.sizes;
+          }
+
+          // لو المقاسات Array
+          if (Array.isArray(modelSizes)) {
+            modelSizes.forEach((size) => {
+              if (size && String(size).trim() !== "-") {
+                allSizes.push(String(size).trim());
+              }
+            });
+          }
+
+          // لو المقاسات String
+          else if (typeof modelSizes === "string") {
+            modelSizes
+              .split(/[,،/|]+/)
+              .map((size) => size.trim())
+              .filter((size) => size && size !== "-")
+              .forEach((size) => {
+                allSizes.push(size);
+              });
+          }
+        });
       }
 
-      const defaultImage = "https://placehold.co/400x600/f8fafc/1e293b?text=صورة+الموديل";
+      // ============================================
+      // إزالة المقاسات المكررة
+      // ============================================
+
+      specs.sizes = [...new Set(allSizes)];
+
+      // ============================================
+      // لو مفيش مقاسات
+      // ============================================
+
+      if (specs.sizes.length === 0) {
+        specs.sizes = ["غير محدد"];
+      }
+
+      // ============================================
+      // الصور
+      // ============================================
+
+      const defaultImage =
+        "https://placehold.co/400x600/f8fafc/1e293b?text=صورة+الموديل";
 
       return {
-        models: modelsData.map(m => ({
+        models: modelsData.map((m) => ({
           model_number: m.model_number,
-          image_url: m.image_url ? m.image_url : defaultImage
+          image_url: m.image_url
+            ? m.image_url
+            : defaultImage,
         })),
-        ...specs
+
+        ...specs,
+
+        // نحولها String عشان الـ PDF يعرضها بسهولة
+        sizes: specs.sizes.join(" / "),
       };
     } catch (err) {
-      console.error("Error fetching details for PDF:", err);
-      return { models: [], category: "-", department: "-", main_fabric: "-", fabric_weight: "-", sizes: "-" };
+      console.error(
+        "Error fetching details for PDF:",
+        err
+      );
+
+      return {
+        models: [],
+        category: "-",
+        department: "-",
+        main_fabric: "-",
+        fabric_weight: "-",
+        sizes: "-",
+      };
     }
   },
 

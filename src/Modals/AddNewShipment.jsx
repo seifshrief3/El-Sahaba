@@ -51,6 +51,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
     }
 
     const fetchBrandData = async () => {
+      // 1. جلب بيانات العملاء
       const { data: custData } = await supabase
         .from("customers")
         .select("id, name")
@@ -58,7 +59,19 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
       if (custData) setCustomers(custData);
 
-      const { data: invData } = await supabase
+      // 💡 2. خطوة إضافية: جلب كل المقاسات لعمل "قاموس ترجمة" (أضمن طريقة)
+      const { data: sizesData } = await supabase
+        .from("sizes")
+        .select("id, name");
+      const sizeMap = {};
+      if (sizesData) {
+        sizesData.forEach((s) => {
+          sizeMap[s.id] = s.name; // ربط الـ UUID باسم المقاس
+        });
+      }
+
+      // 3. جلب الأرصدة (رجعنا الاستعلام زي ما كان عشان الداتابيز متضربش)
+      const { data: invData, error: invError } = await supabase
         .from("inventory")
         .select(
           `
@@ -72,12 +85,21 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
         .eq("production_orders.collections.brand_id", formData.brand_id)
         .gt("available_qty", 0);
 
+      if (invError) {
+        console.error("🚨 خطأ في جلب الأرصدة:", invError);
+      }
+
       if (invData) {
-        const formattedInv = invData.map((item) => ({
-          id: item.id,
-          name: `${item.models?.name} - ${item.color} - مقاس ${item.size}`,
-          available: item.available_qty,
-        }));
+        const formattedInv = invData.map((item) => {
+          // 💡 هنا بنترجم الـ ID اللي راجع من الداتابيز للاسم الحقيقي بتاعه (S, M, L)
+          const realSizeName = sizeMap[item.size] || item.size;
+
+          return {
+            id: item.id,
+            name: `${item.models?.name} - ${item.color} - مقاس ${realSizeName}`,
+            available: item.available_qty,
+          };
+        });
         setInventoryItems(formattedInv);
       }
     };

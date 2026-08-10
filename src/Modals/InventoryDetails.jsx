@@ -1,14 +1,34 @@
 import { X, Box, Truck, Clock, FileText, Activity } from "lucide-react";
 import React, { useEffect, useState, useRef } from "react";
 import { useReactToPrint } from "react-to-print";
+import { supabase } from "../../supabase"; // 💡 ضفنا الاستيراد ده (تأكد من مسار ملف supabase)
 
 const InventoryDetails = ({ selectedItem, setSelectedItem }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [sizeMap, setSizeMap] = useState({}); // 💡 state جديد لتخزين أسماء المقاسات للترجمة
   const printRef = useRef(null);
 
-  // لعمل تأثير الدخول السلس (Slide In)
+  // لعمل تأثير الدخول السلس (Slide In) وجلب أسماء المقاسات
   useEffect(() => {
     setIsOpen(true);
+
+    // 💡 دالة لجلب قاموس المقاسات من الداتابيز عشان نترجم الـ ID للاسم
+    const fetchSizes = async () => {
+      try {
+        const { data, error } = await supabase.from("sizes").select("id, name");
+        if (!error && data) {
+          const map = {};
+          data.forEach((s) => {
+            map[s.id] = s.name; // ربط الـ ID بالاسم
+          });
+          setSizeMap(map);
+        }
+      } catch (err) {
+        console.error("Error fetching sizes:", err);
+      }
+    };
+
+    fetchSizes();
   }, []);
 
   const closeModal = () => {
@@ -16,7 +36,7 @@ const InventoryDetails = ({ selectedItem, setSelectedItem }) => {
     setTimeout(() => setSelectedItem(null), 300); // استنى الأنميشن يخلص قبل ما تقفل
   };
 
-  // 💡 إعداد دالة الطباعة لطباعة القالب المخفي فقط
+  // إعداد دالة الطباعة لطباعة القالب المخفي فقط
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: `تفاصيل_مخزون_${selectedItem?.model}_${selectedItem?.color}`,
@@ -25,13 +45,17 @@ const InventoryDetails = ({ selectedItem, setSelectedItem }) => {
   // تجميع المقاسات عشان لو في أكتر من صف لنفس المقاس في الداتابيز يتجمعوا صح
   const aggregatedSizes =
     selectedItem?.sizes?.reduce((acc, curr) => {
-      const size = curr.size || "بدون مقاس";
-      if (!acc[size]) {
-        acc[size] = { available: 0, reserved: 0, shipped: 0 };
+      const rawSize = curr.size || "بدون مقاس";
+
+      // 💡 هنا بنترجم الـ ID للاسم الحقيقي لو موجود، لو مش موجود (زي كلمة 'غير محدد') بيفضل زي ما هو
+      const sizeName = sizeMap[rawSize] || rawSize;
+
+      if (!acc[sizeName]) {
+        acc[sizeName] = { available: 0, reserved: 0, shipped: 0 };
       }
-      acc[size].available += curr.available || 0;
-      acc[size].reserved += curr.reserved || 0;
-      acc[size].shipped += curr.shipped || 0;
+      acc[sizeName].available += curr.available || 0;
+      acc[sizeName].reserved += curr.reserved || 0;
+      acc[sizeName].shipped += curr.shipped || 0;
       return acc;
     }, {}) || {};
 
@@ -192,7 +216,7 @@ const InventoryDetails = ({ selectedItem, setSelectedItem }) => {
         <div className="shrink-0 border-t border-slate-200 bg-white p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
           <div className="flex justify-end gap-3">
             <button
-              onClick={handlePrint} // 💡 تم ربط الزرار بدالة الطباعة الجديدة
+              onClick={handlePrint}
               className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-bold text-red-700 transition hover:bg-red-100"
             >
               <FileText size={18} />
@@ -209,7 +233,7 @@ const InventoryDetails = ({ selectedItem, setSelectedItem }) => {
       </div>
 
       {/* ========================================================= */}
-      {/* 💡 قالب الطباعة المخفي (سيظهر فقط عند الطباعة كصفحة A4 منسقة) */}
+      {/* 💡 قالب الطباعة المخفي */}
       {/* ========================================================= */}
       <div style={{ display: "none" }}>
         <div

@@ -109,14 +109,17 @@ const Notifications = () => {
     setIsProcessing(true);
 
     try {
-      // 💡 ضفنا كلمة color في الاستعلام عشان نجيب اللون
+      // 1. جلب بيانات الأوردر وعناصره مع جدول المقاسات
       const { data: order, error: fetchError } = await supabase
         .from("production_orders")
         .select(
           `
           id, 
           cartons_count, 
-          production_order_items (model_id, size, quantity, color), 
+          production_order_items (
+            model_id, color, total_quantity, quantity,
+            production_order_item_sizes (size_id, quantity)
+          ), 
           collections (name)
         `,
         )
@@ -125,6 +128,89 @@ const Notifications = () => {
 
       if (fetchError) throw fetchError;
 
+      let totalItemsInserted = 0; // عشان نعد إحنا ضفنا كام قطعة فعلاً
+
+      // 2. تحديث أرصدة المخزن بشكل صحيح (تراكمي) مفصلة بالمقاسات
+      if (
+        order.production_order_items &&
+        order.production_order_items.length > 0
+      ) {
+        for (const item of order.production_order_items) {
+          const itemColor = item.color || "غير محدد";
+
+          // تجهيز قائمة المقاسات بدقة
+          const sizesList =
+            item.production_order_item_sizes &&
+            item.production_order_item_sizes.length > 0
+              ? item.production_order_item_sizes
+              : [
+                  {
+                    size_id: "غير محدد",
+                    quantity: item.total_quantity || item.quantity || 0,
+                  },
+                ];
+
+          for (const sizeObj of sizesList) {
+            const currentSize = sizeObj.size_id || "غير محدد";
+            const currentQty = sizeObj.quantity || 0;
+
+            if (currentQty === 0) continue; // لو الكمية صفر مش هنضيفها
+
+            totalItemsInserted += 1;
+
+            const { data: existingInv, error: searchError } = await supabase
+              .from("inventory")
+              .select("id, received_qty, available_qty")
+              .eq("model_id", item.model_id)
+              .eq("color", itemColor)
+              .eq("size", currentSize)
+              .maybeSingle();
+
+            if (searchError) throw searchError;
+
+            if (existingInv) {
+              // 🚨 قفشنا الإيرور بتاع التحديث لو حصل
+              const { error: updateInvError } = await supabase
+                .from("inventory")
+                .update({
+                  received_qty: (existingInv.received_qty || 0) + currentQty,
+                  available_qty: (existingInv.available_qty || 0) + currentQty,
+                  last_updated: new Date().toISOString(),
+                })
+                .eq("id", existingInv.id);
+
+              if (updateInvError) throw updateInvError;
+            } else {
+              // 🚨 قفشنا الإيرور بتاع الإضافة لو حصل
+              const { error: insertInvError } = await supabase
+                .from("inventory")
+                .insert({
+                  production_order_id: order.id,
+                  model_id: item.model_id,
+                  color: itemColor,
+                  size: currentSize,
+                  received_qty: currentQty,
+                  available_qty: currentQty,
+                  reserved_qty: 0,
+                  shipped_qty: 0,
+                });
+
+              if (insertInvError) throw insertInvError;
+            }
+          }
+        }
+      }
+
+      // لو اللوب خلصت ومفيش ولا قطعة اتضافت (لأن الكميات كلها جاية 0 من الداتابيز)
+      if (totalItemsInserted === 0) {
+        toast.error(
+          "لم يتم إضافة أي منتج للمخزن! كميات هذا الأوردر مسجلة بـ (0)",
+        );
+        setIsProcessing(false);
+        return; // نوقف الكود وميحدثش حالة الأوردر
+      }
+
+      // 3. تحديث حالة الأوردر لـ "مكتمل"
       const { error: updateError } = await supabase
         .from("production_orders")
         .update({ status: "completed" })
@@ -132,39 +218,32 @@ const Notifications = () => {
 
       if (updateError) throw updateError;
 
-      if (
-        order.production_order_items &&
-        order.production_order_items.length > 0
-      ) {
-        // 💡 ضفنا color هنا عشان يتحفظ في جدول inventory
-        const inventoryData = order.production_order_items.map((item) => ({
-          production_order_id: order.id,
-          model_id: item.model_id,
-          size: item.size,
-          color: item.color || "غير محدد",
-          received_qty: item.quantity,
-          available_qty: item.quantity,
-        }));
-        await supabase.from("inventory").insert(inventoryData);
-      }
-
+      // 4. إرسال الإشعار
       await notificationService.sendNotification(
         "planning",
         "تم استلام البضاعة 📦✅",
-        `قسم المخازن استلم كولكشن (${order.collections.name}) وتمت إضافته لأرصدة الجرد.`,
+        `قسم المخازن استلم كولكشن (${order.collections?.name || ""}) وتمت إضافته لأرصدة الجرد.`,
         notif.reference_id,
       );
 
-      await handleNotificationClick(notif);
+      // 5. تحديد الإشعار كمقروء
+      if (typeof handleNotificationClick === "function") {
+        await handleNotificationClick(notif);
+      } else if (typeof handleMarkAsRead === "function") {
+        await handleMarkAsRead(notif.id);
+      }
+
       toast.success("تم الاستلام وإضافة الكميات للمخزن بنجاح!");
     } catch (error) {
-      console.error("Error receiving in warehouse:", error);
-      toast.error("حدث خطأ أثناء استلام البضاعة.");
+      // 🚨 هنا هيطبعلك سبب الفشل الحقيقي في الكونسول ويوضحهولك
+      console.error("🚨 إيرور الاستلام الحقيقي:", error);
+      toast.error(
+        `فشل الإضافة: ${error.message || "تأكد من أعمدة جدول inventory"}`,
+      );
     } finally {
       setIsProcessing(false);
     }
   };
-
   if (isLoading) {
     return (
       <div

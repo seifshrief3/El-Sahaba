@@ -26,7 +26,7 @@ const ReceivingFromPlanning = () => {
               brands (name_ar)
             ),
             production_order_items (
-              quantity
+              total_quantity
             )
           `,
           )
@@ -45,7 +45,7 @@ const ReceivingFromPlanning = () => {
           cartonsCount: order.cartons_count || 0,
           totalQuantity:
             order.production_order_items?.reduce(
-              (sum, item) => sum + item.quantity,
+              (sum, item) => sum + item.total_quantity,
               0,
             ) || 0,
           // تحديد تاريخ تقريبي للاستلام
