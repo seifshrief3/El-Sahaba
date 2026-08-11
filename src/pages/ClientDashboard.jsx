@@ -44,7 +44,7 @@ const ClientDashboard = () => {
         const { data: brandData, error: brandError } = await supabase
           .from("brands")
           .select("*")
-          .eq("client_id", user.id)
+          .eq("client_portal_user_id", user.id)
           .single();
 
         if (brandError || !brandData) throw brandError;

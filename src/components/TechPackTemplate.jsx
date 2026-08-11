@@ -22,7 +22,47 @@ const TechPackTemplate = React.forwardRef(
       }
       return String(value);
     };
+    const renderFabricNames = (fabrics) => {
+      if (!Array.isArray(fabrics) || fabrics.length === 0) {
+        return "---";
+      }
 
+      return fabrics
+        .map((fabric) => {
+          if (typeof fabric === "string") {
+            return fabric;
+          }
+
+          if (fabric && typeof fabric === "object") {
+            return fabric.name || "";
+          }
+
+          return "";
+        })
+        .filter(Boolean)
+        .join(" | ");
+    };
+
+    const renderFabricWeights = (fabrics) => {
+      if (!Array.isArray(fabrics) || fabrics.length === 0) {
+        return "---";
+      }
+
+      return fabrics
+        .map((fabric) => {
+          if (typeof fabric === "string") {
+            return "";
+          }
+
+          if (fabric && typeof fabric === "object") {
+            return fabric.weight || "";
+          }
+
+          return "";
+        })
+        .filter(Boolean)
+        .join(" | ");
+    };
     const styles = {
       // إعدادات الصفحة المطاطية لضمان احتواء كامل على صفحة A4 واحدة
       page: {
@@ -375,13 +415,14 @@ const TechPackTemplate = React.forwardRef(
                   <tr>
                     <th style={styles.th}>نوع الخامة</th>
                     <td style={styles.td}>
-                      {safeRender(data?.basic_info?.main_fabric)}
+                      {renderFabricNames(data?.basic_info?.main_fabric)}
                     </td>
                   </tr>
+
                   <tr>
                     <th style={styles.th}>وزن الخامة</th>
                     <td style={styles.td}>
-                      {safeRender(data?.basic_info?.fabric_weight)}
+                      {renderFabricWeights(data?.basic_info?.main_fabric)}
                     </td>
                   </tr>
                   <tr>
@@ -628,7 +669,9 @@ const TechPackTemplate = React.forwardRef(
                       }}
                     ></div>
                     <div style={{ fontSize: "8.5px", fontWeight: "bold" }}>
-                      {typeof color === "string" ? color : "لون"}
+                      {typeof color === "string"
+                        ? color
+                        : `${color?.part || "جزء"}: ${color?.color || "يحدد لاحقاً"}`}{" "}
                     </div>
                   </div>
                 ))}

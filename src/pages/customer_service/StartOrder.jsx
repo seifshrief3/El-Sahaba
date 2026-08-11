@@ -1,14 +1,20 @@
 import React, { useState, useRef, useEffect } from "react";
+
 import { supabase } from "../../../supabase";
+
 import { Link, useParams, useNavigate } from "react-router-dom";
+
 import { useReactToPrint } from "react-to-print";
 
 import WorkOrderPDFTemplate from "../../components/WorkOrderPDFTemplate";
 import ContractPDFTemplate from "../../components/ContractPDFTemplate";
 
 import { handleIssueOrderToPlanning } from "../../services/collectionsService";
+
 import { toast } from "sonner";
+
 import { notificationService } from "../../services/notificationService";
+
 import { sendForApproval } from "../../services/approvalsService";
 
 /* ============================================================
@@ -68,16 +74,296 @@ const safeText = (value, fallback = "-") => {
   return fallback;
 };
 
-const getFirstValidArray = (...values) => {
-  for (const value of values) {
-    const result = normalizeToStrings(value);
+/* ============================================================
+   Extract Components
+============================================================ */
 
-    if (result.length > 0) {
-      return result;
+/*
+  الشكل المتوقع:
+
+  [
+    {
+      part: "تيشيرت",
+      color: "بينك"
+    },
+    {
+      part: "بنطلون",
+      color: "أسود"
+    }
+  ]
+
+  أو لو عندنا Variants:
+
+  [
+    {
+      variant: 1,
+      part: "تيشيرت",
+      color: "بينك"
+    },
+    {
+      variant: 1,
+      part: "بنطلون",
+      color: "أسود"
+    },
+    {
+      variant: 2,
+      part: "تيشيرت",
+      color: "رمادي"
+    },
+    {
+      variant: 2,
+      part: "بنطلون",
+      color: "أبيض"
+    }
+  ]
+*/
+
+const extractComponents = (...values) => {
+  for (const value of values) {
+    if (value === null || value === undefined) {
+      continue;
+    }
+
+    /* ========================================================
+       Array
+    ======================================================== */
+
+    if (Array.isArray(value)) {
+      const result = [];
+
+      value.forEach((item) => {
+        if (item && typeof item === "object" && !Array.isArray(item)) {
+          const color =
+            item.color ?? item.colors ?? item.colour ?? item.color_name;
+
+          const part =
+            item.part ?? item.part_name ?? item.partName ?? item.type ?? "";
+
+          const variant =
+            item.variant ?? item.variant_key ?? item.variantKey ?? null;
+
+          if (color !== undefined) {
+            result.push({
+              part: safeText(part, ""),
+              color: safeText(color, ""),
+              variant:
+                variant !== null && variant !== undefined
+                  ? Number(variant)
+                  : null,
+            });
+          }
+        } else if (typeof item === "string") {
+          result.push({
+            part: "",
+            color: item,
+            variant: null,
+          });
+        }
+      });
+
+      if (result.length > 0) {
+        return result.filter((item) => item.color);
+      }
+    }
+
+    /* ========================================================
+       Object
+    ======================================================== */
+
+    if (typeof value === "object" && !Array.isArray(value)) {
+      const directColor =
+        value.color ?? value.colors ?? value.colour ?? value.color_name;
+
+      const directPart =
+        value.part ?? value.part_name ?? value.partName ?? value.type ?? "";
+
+      const directVariant =
+        value.variant ?? value.variant_key ?? value.variantKey ?? null;
+
+      if (directColor !== undefined) {
+        return [
+          {
+            part: safeText(directPart, ""),
+            color: safeText(directColor, ""),
+            variant:
+              directVariant !== null && directVariant !== undefined
+                ? Number(directVariant)
+                : null,
+          },
+        ];
+      }
+
+      /*
+        لو الـ object عبارة عن:
+
+        {
+          "تيشيرت": "بينك",
+          "بنطلون": "أسود"
+        }
+
+        نحوله إلى Components.
+      */
+
+      const entries = Object.entries(value).filter(
+        ([key]) =>
+          ![
+            "part",
+            "parts",
+            "type",
+            "name",
+            "color",
+            "colors",
+            "colour",
+            "color_name",
+            "variant",
+            "variant_key",
+            "variantKey",
+          ].includes(String(key).trim().toLowerCase()),
+      );
+
+      if (entries.length > 0) {
+        const result = entries
+          .map(([part, color]) => ({
+            part: String(part).trim(),
+            color: safeText(color, "").trim(),
+            variant: null,
+          }))
+          .filter((item) => item.color);
+
+        if (result.length > 0) {
+          return result;
+        }
+      }
+    }
+
+    /* ========================================================
+       String
+    ======================================================== */
+
+    if (typeof value === "string") {
+      const colors = normalizeToStrings(value);
+
+      if (colors.length > 0) {
+        return colors.map((color) => ({
+          part: "",
+          color,
+          variant: null,
+        }));
+      }
     }
   }
 
   return [];
+};
+
+/* ============================================================
+   Extract Sizes
+============================================================ */
+
+const extractSizes = (...values) => {
+  for (const value of values) {
+    if (value === null || value === undefined) {
+      continue;
+    }
+
+    if (typeof value === "string") {
+      const result = normalizeToStrings(value);
+
+      if (result.length > 0) {
+        return result;
+      }
+    }
+
+    if (Array.isArray(value)) {
+      const result = value.flatMap((item) => normalizeToStrings(item));
+
+      if (result.length > 0) {
+        return result;
+      }
+    }
+
+    if (typeof value === "object") {
+      const directSizes =
+        value.sizes ?? value.size ?? value.size_range ?? value.range;
+
+      if (directSizes !== undefined) {
+        const result = normalizeToStrings(directSizes);
+
+        if (result.length > 0) {
+          return result;
+        }
+      }
+
+      const keys = Object.keys(value)
+        .map((key) => String(key).trim())
+        .filter(Boolean);
+
+      if (keys.length > 0) {
+        return keys;
+      }
+    }
+  }
+
+  return [];
+};
+
+/* ============================================================
+   Build Variants
+============================================================ */
+
+const buildVariants = (components) => {
+  /*
+    لو الداتا القديمة لا تحتوي variant:
+
+    تيشيرت / بينك
+    بنطلون / أسود
+
+    نعتبرهم Variant واحد.
+
+    لو الداتا تحتوي:
+
+    variant: 1
+    variant: 2
+
+    نستخدمها كما هي.
+  */
+
+  const hasExplicitVariants = components.some(
+    (component) =>
+      component.variant !== null &&
+      component.variant !== undefined &&
+      Number.isFinite(Number(component.variant)),
+  );
+
+  const variantsMap = new Map();
+
+  if (!hasExplicitVariants) {
+    variantsMap.set(1, components);
+
+    return [
+      {
+        variantKey: 1,
+        components,
+      },
+    ];
+  }
+
+  components.forEach((component) => {
+    const variantKey = Number(component.variant) || 1;
+
+    if (!variantsMap.has(variantKey)) {
+      variantsMap.set(variantKey, []);
+    }
+
+    variantsMap.get(variantKey).push(component);
+  });
+
+  return Array.from(variantsMap.entries()).map(
+    ([variantKey, variantComponents]) => ({
+      variantKey: Number(variantKey),
+      components: variantComponents,
+    }),
+  );
 };
 
 /* ============================================================
@@ -86,28 +372,41 @@ const getFirstValidArray = (...values) => {
 
 const StartOrder = () => {
   const { id } = useParams();
+
   const navigate = useNavigate();
 
   const [collectionInfo, setCollectionInfo] = useState(null);
+
   const [isLoading, setIsLoading] = useState(true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [isSendingContract, setIsSendingApproval] = useState(false);
 
   /*
-    الشكل النهائي:
+    الشكل الجديد:
 
     {
       modelId: {
-        "بينك": 5,
-        "كحلي": 7,
-        "بيج": 3
+        1: {
+          S: 10,
+          M: 15,
+          L: 12
+        },
+
+        2: {
+          S: 5,
+          M: 8,
+          L: 10
+        }
       }
     }
   */
+
   const [seriesCounts, setSeriesCounts] = useState({});
 
   const workOrderRef = useRef(null);
+
   const contractRef = useRef(null);
 
   /* ============================================================
@@ -123,26 +422,26 @@ const StartOrder = () => {
           .from("collections")
           .select(
             `
-              id,
-              name,
-              brands (
-                name_ar,
-                name_en
-              ),
-              models (
                 id,
-                model_number,
                 name,
-                image_url,
-                colors,
-                tech_packs (
-                  content
+                brands (
+                  name_ar,
+                  name_en
                 ),
-                quotation_items (
-                  selling_price
+                models (
+                  id,
+                  model_number,
+                  name,
+                  image_url,
+                  colors,
+                  tech_packs (
+                    content
+                  ),
+                  quotation_items (
+                    selling_price
+                  )
                 )
-              )
-            `,
+              `,
           )
           .eq("id", id)
           .single();
@@ -152,47 +451,81 @@ const StartOrder = () => {
         }
 
         /* ======================================================
-           تجهيز الموديلات
-        ====================================================== */
+             تجهيز الموديلات
+          ====================================================== */
 
-        const formattedModels = (orderData.models || []).map((m, index) => {
+        const formattedModels = (orderData.models || []).map((model, index) => {
           /* ================= Tech Pack ================= */
 
-          const tpContent = Array.isArray(m.tech_packs)
-            ? m.tech_packs[0]?.content
-            : m.tech_packs?.content;
+          const tpContent = Array.isArray(model.tech_packs)
+            ? model.tech_packs[0]?.content
+            : model.tech_packs?.content;
 
           const info = tpContent?.basic_info || tpContent || {};
 
-          /* ================= Colors ================= */
+          /* ================= Components ================= */
 
-          let finalColors = getFirstValidArray(m.colors, info.colors);
+          let components = extractComponents(
+            model.colors,
+            info.colors,
+            info.color,
+          );
 
-          if (finalColors.length === 0) {
-            finalColors = ["كحلي", "أسود", "رمادي"];
+          components = components
+            .map((component) => ({
+              part: safeText(component.part, "").trim(),
+
+              color: safeText(component.color, "").trim(),
+
+              variant:
+                component.variant !== null && component.variant !== undefined
+                  ? Number(component.variant)
+                  : null,
+            }))
+            .filter((component) => component.color);
+
+          /*
+                  لو مفيش Components
+                */
+
+          if (components.length === 0) {
+            components = [
+              {
+                part: "",
+                color: "غير محدد",
+                variant: null,
+              },
+            ];
           }
 
-          finalColors = finalColors
-            .map((color) => safeText(color, ""))
-            .filter(Boolean);
+          /* ================= Variants ================= */
+
+          const variants = buildVariants(components);
 
           /* ================= Sizes ================= */
 
-          let finalSizes = getFirstValidArray(info.sizes, info.size_range);
+          let finalSizes = extractSizes(
+            info.sizes,
+            info.size_range,
+            info.sizeRange,
+          );
+
+          finalSizes = finalSizes
+            .map((size) => safeText(size, "").trim())
+            .filter(Boolean);
+
+          finalSizes = [...new Set(finalSizes)];
 
           if (finalSizes.length === 0) {
             finalSizes = ["M", "L", "XL"];
           }
 
-          finalSizes = finalSizes
-            .map((size) => safeText(size, ""))
-            .filter(Boolean);
-
           /* ================= Price ================= */
 
           const price =
-            Array.isArray(m.quotation_items) && m.quotation_items.length > 0
-              ? Number(m.quotation_items[0]?.selling_price) || 0
+            Array.isArray(model.quotation_items) &&
+            model.quotation_items.length > 0
+              ? Number(model.quotation_items[0]?.selling_price) || 0
               : 0;
 
           /* ================= Fabric ================= */
@@ -211,12 +544,12 @@ const StartOrder = () => {
 
           /* ================= Model ================= */
 
-          const modelName = safeText(m.name, `موديل ${index + 1}`);
+          const modelName = safeText(model.name, `موديل ${index + 1}`);
 
-          const modelNumber = safeText(m.model_number, `MOD-${index + 1}`);
+          const modelNumber = safeText(model.model_number, `MOD-${index + 1}`);
 
           return {
-            real_id: m.id,
+            real_id: model.id,
 
             id: modelNumber,
 
@@ -224,9 +557,12 @@ const StartOrder = () => {
 
             name: modelName,
 
-            image_url: typeof m.image_url === "string" ? m.image_url : null,
+            image_url:
+              typeof model.image_url === "string" ? model.image_url : null,
 
-            colors: finalColors,
+            components,
+
+            variants,
 
             sizes: finalSizes,
 
@@ -239,8 +575,8 @@ const StartOrder = () => {
         });
 
         /* ======================================================
-           Collection
-        ====================================================== */
+             Collection
+          ====================================================== */
 
         const formattedData = {
           id: orderData.id,
@@ -260,31 +596,30 @@ const StartOrder = () => {
         console.log("FINAL COLLECTION DATA:", formattedData);
 
         formattedData.models.forEach((model) => {
-          console.log(
-            "MODEL:",
-            model.name,
-            "COLORS:",
-            model.colors,
-            "SIZES:",
-            model.sizes,
-          );
+          console.log("MODEL:", model.name);
+
+          console.log("VARIANTS:", model.variants);
+
+          console.log("SIZES:", model.sizes);
         });
 
         setCollectionInfo(formattedData);
 
         /* ======================================================
-           Initial Series
-
-           كل لون له عدد سريهات مستقل
-        ====================================================== */
+             Initial Series
+          ====================================================== */
 
         const initialCounts = {};
 
         formattedData.models.forEach((model) => {
           initialCounts[model.id] = {};
 
-          model.colors.forEach((color) => {
-            initialCounts[model.id][color] = 5;
+          model.variants.forEach((variant) => {
+            initialCounts[model.id][variant.variantKey] = {};
+
+            model.sizes.forEach((size) => {
+              initialCounts[model.id][variant.variantKey][size] = 5;
+            });
           });
         });
 
@@ -292,7 +627,7 @@ const StartOrder = () => {
       } catch (error) {
         console.error("خطأ في جلب بيانات أمر التشغيل:", error);
 
-        toast.error("حدث خطأ أثناء جلب بيانات أمر التشغيل.");
+        toast.error("حدث خطأ في جلب بيانات أمر التشغيل.");
       } finally {
         setIsLoading(false);
       }
@@ -304,10 +639,10 @@ const StartOrder = () => {
   }, [id]);
 
   /* ============================================================
-     Change Series For Color
+     Change Series
   ============================================================ */
 
-  const handleColorSeriesChange = (modelId, color, value) => {
+  const handleSeriesChange = (modelId, variantKey, size, value) => {
     const parsedValue = Math.max(0, parseInt(value, 10) || 0);
 
     setSeriesCounts((prev) => ({
@@ -316,7 +651,11 @@ const StartOrder = () => {
       [modelId]: {
         ...(prev[modelId] || {}),
 
-        [color]: parsedValue,
+        [variantKey]: {
+          ...(prev[modelId]?.[variantKey] || {}),
+
+          [size]: parsedValue,
+        },
       },
     }));
   };
@@ -333,8 +672,12 @@ const StartOrder = () => {
     collectionInfo.models.forEach((model) => {
       newCounts[model.id] = {};
 
-      model.colors.forEach((color) => {
-        newCounts[model.id][color] = parsedValue;
+      model.variants.forEach((variant) => {
+        newCounts[model.id][variant.variantKey] = {};
+
+        model.sizes.forEach((size) => {
+          newCounts[model.id][variant.variantKey][size] = parsedValue;
+        });
       });
     });
 
@@ -342,14 +685,24 @@ const StartOrder = () => {
   };
 
   /* ============================================================
+     Variant Total
+  ============================================================ */
+
+  const getVariantTotal = (model, variantKey) => {
+    return model.sizes.reduce((total, size) => {
+      return (
+        total + (Number(seriesCounts?.[model.id]?.[variantKey]?.[size]) || 0)
+      );
+    }, 0);
+  };
+
+  /* ============================================================
      Model Total
   ============================================================ */
 
   const getModelTotal = (model) => {
-    return model.colors.reduce((total, color) => {
-      const series = Number(seriesCounts?.[model.id]?.[color]) || 0;
-
-      return total + model.sizes.length * series;
+    return model.variants.reduce((total, variant) => {
+      return total + getVariantTotal(model, variant.variantKey);
     }, 0);
   };
 
@@ -372,11 +725,14 @@ const StartOrder = () => {
     }
 
     return collectionInfo.models.some((model) =>
-      model.colors.some((color) => {
-        const series = Number(seriesCounts?.[model.id]?.[color]) || 0;
+      model.variants.some((variant) =>
+        model.sizes.some((size) => {
+          const series =
+            Number(seriesCounts?.[model.id]?.[variant.variantKey]?.[size]) || 0;
 
-        return series <= 0;
-      }),
+          return series <= 0;
+        }),
+      ),
     );
   };
 
@@ -414,9 +770,7 @@ const StartOrder = () => {
     }
 
     if (hasInvalidSeries()) {
-      toast.error(
-        "برجاء تحديد عدد سريهات أكبر من صفر لكل لون في جميع الموديلات.",
-      );
+      toast.error("برجاء تحديد عدد سريهات أكبر من صفر لكل Variant ولكل مقاس.");
 
       return;
     }
@@ -527,12 +881,12 @@ const StartOrder = () => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-[#1a365d] mb-2">
-              إصدار أمر التشغيل لـ: {safeText(collectionInfo.brandName)}
+              إصدار أمر التشغيل لـ: {collectionInfo.brandName}
             </h1>
 
             <p className="text-sm text-slate-500">
-              ({safeText(collectionInfo.collectionName)}) - حدد عدد السريهات لكل
-              لون ليقوم النظام بتوزيع الكميات تلقائيًا.
+              ({collectionInfo.collectionName}) - حدد عدد السريهات لكل Variant
+              ولكل مقاس.
             </p>
           </div>
 
@@ -558,11 +912,8 @@ const StartOrder = () => {
             </h3>
 
             <p className="text-xs text-slate-500 mb-4 text-right">
-              يمكنك تطبيق عدد موحد على{" "}
-              <span className="font-bold text-red-500">
-                جميع الألوان والموديلات
-              </span>
-              ، أو تعديل كل لون بشكل منفصل من الجدول.
+              يمكنك تطبيق عدد موحد على جميع الـ Variants والمقاسات، أو تعديل كل
+              مقاس بشكل منفصل.
             </p>
 
             <div className="flex flex-wrap gap-3 mb-5">
@@ -599,134 +950,191 @@ const StartOrder = () => {
 
         <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col">
           <h3 className="text-lg font-bold text-[#1a365d] mb-6 text-right">
-            توزيع الكميات والسريهات حسب اللون
+            توزيع الكميات والسريهات حسب التركيبة والمقاس
           </h3>
 
-          <div className="border border-slate-200 rounded-xl overflow-x-auto mb-6">
-            <table className="w-full text-sm text-center min-w-[750px]">
-              <thead className="bg-[#1a365d]">
-                <tr>
-                  <th className="py-3 px-4 font-semibold text-right text-white">
-                    الموديل
-                  </th>
+          <div className="space-y-6">
+            {collectionInfo.models.map((model) => (
+              <div
+                key={model.id}
+                className="border border-slate-200 rounded-xl overflow-hidden"
+              >
+                {/* ================= Model Header ================= */}
 
-                  <th className="py-3 px-4 font-semibold text-white">اللون</th>
+                <div className="bg-slate-50 p-4 border-b border-slate-200">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      {model.image_url ? (
+                        <img
+                          src={model.image_url}
+                          alt={safeText(model.name)}
+                          className="w-14 h-14 object-contain rounded-lg border border-slate-200 bg-white"
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-xs text-slate-400">
+                          صورة
+                        </div>
+                      )}
 
-                  <th className="py-3 px-4 font-semibold text-white">
-                    المقاسات
-                  </th>
+                      <div>
+                        <div className="font-bold text-[#1a365d]">
+                          {model.name}
+                        </div>
 
-                  <th className="py-3 px-4 font-semibold text-white w-32">
-                    عدد السريهات
-                  </th>
+                        <div className="text-xs text-slate-400 mt-1">
+                          {model.model_number}
+                        </div>
+                      </div>
+                    </div>
 
-                  <th className="py-3 px-4 font-semibold text-white">
-                    إجمالي اللون
-                  </th>
-                </tr>
-              </thead>
+                    <div className="text-right">
+                      <div className="text-xs text-slate-500">
+                        إجمالي الموديل
+                      </div>
 
-              <tbody className="divide-y divide-slate-200 text-slate-700">
-                {collectionInfo.models.map((model) =>
-                  model.colors.map((color, colorIndex) => {
-                    const currentSeries =
-                      Number(seriesCounts?.[model.id]?.[color]) || 0;
+                      <div className="font-black text-xl text-[#1a365d]">
+                        {getModelTotal(model).toLocaleString()}
 
-                    const colorQty = model.sizes.length * currentSeries;
+                        <span className="text-xs font-normal text-slate-500 mr-1">
+                          قطعة
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-                    return (
-                      <tr
-                        key={`${model.id}-${color}`}
-                        className="hover:bg-slate-50 transition-colors"
-                      >
-                        {/* Model */}
+                {/* ================= Variants ================= */}
 
-                        <td className="py-4 px-4 text-right">
-                          <div className="flex items-center gap-3">
-                            {colorIndex === 0 ? (
-                              <>
-                                {model.image_url ? (
-                                  <img
-                                    src={model.image_url}
-                                    alt={safeText(model.name)}
-                                    className="w-10 h-10 object-contain rounded border"
-                                  />
-                                ) : (
-                                  <div className="w-10 h-10 rounded border bg-slate-100 flex items-center justify-center text-xs text-slate-400">
-                                    صورة
-                                  </div>
-                                )}
+                <div className="p-4 space-y-5">
+                  {model.variants.map((variant) => (
+                    <div
+                      key={`${model.id}-variant-${variant.variantKey}`}
+                      className="border border-slate-200 rounded-xl overflow-hidden"
+                    >
+                      {/* ================= Variant Header ================= */}
 
-                                <div>
-                                  <div className="font-bold text-[#1a365d]">
-                                    {safeText(model.name)}
-                                  </div>
-
-                                  <div className="text-[10px] text-slate-400">
-                                    {safeText(model.model_number)}
-                                  </div>
-                                </div>
-                              </>
-                            ) : (
-                              <span className="text-xs text-slate-400 pr-14">
-                                ↳ نفس الموديل
-                              </span>
-                            )}
+                      <div className="bg-[#1a365d] text-white p-4">
+                        <div className="flex flex-col sm:flex-row justify-between gap-3">
+                          <div className="font-bold">
+                            تركيبة رقم {variant.variantKey}
                           </div>
-                        </td>
 
-                        {/* Color */}
-
-                        <td className="py-4 px-4">
-                          <span className="inline-flex px-3 py-1 rounded-full bg-slate-100 text-[#1a365d] font-bold text-xs">
-                            {safeText(color)}
-                          </span>
-                        </td>
-
-                        {/* Sizes */}
-
-                        <td className="py-4 px-4 text-xs">
-                          {model.sizes.map((size) => safeText(size)).join("، ")}
-                        </td>
-
-                        {/* Series */}
-
-                        <td className="py-4 px-4">
-                          <input
-                            type="number"
-                            min="0"
-                            value={currentSeries}
-                            onChange={(e) =>
-                              handleColorSeriesChange(
-                                model.id,
-                                color,
-                                e.target.value,
-                              )
-                            }
-                            className="w-full border border-slate-300 rounded-md p-1.5 text-center font-bold text-[#b91c1c] focus:outline-none focus:border-[#1a365d]"
-                          />
-                        </td>
-
-                        {/* Total */}
-
-                        <td className="py-4 px-4 font-bold text-lg text-slate-800">
-                          {colorQty.toLocaleString()}
-
-                          <span className="text-xs text-slate-500 font-normal mr-1">
+                          <div className="text-sm">
+                            إجمالي التركيبة:{" "}
+                            <span className="font-black">
+                              {getVariantTotal(
+                                model,
+                                variant.variantKey,
+                              ).toLocaleString()}
+                            </span>{" "}
                             قطعة
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  }),
-                )}
-              </tbody>
-            </table>
+                          </div>
+                        </div>
+
+                        {/* Components */}
+
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {variant.components.map(
+                            (component, componentIndex) => (
+                              <span
+                                key={`${component.part}-${component.color}-${componentIndex}`}
+                                className="inline-flex items-center gap-2 bg-white/10 border border-white/20 px-3 py-1.5 rounded-lg text-xs"
+                              >
+                                <span className="font-bold">
+                                  {component.part || "الجزء"}
+                                </span>
+
+                                <span>→</span>
+
+                                <span>{component.color}</span>
+                              </span>
+                            ),
+                          )}
+                        </div>
+                      </div>
+
+                      {/* ================= Sizes ================= */}
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-center min-w-[650px]">
+                          <thead className="bg-slate-50">
+                            <tr>
+                              <th className="py-3 px-4 font-semibold text-right text-[#1a365d]">
+                                المقاس
+                              </th>
+
+                              <th className="py-3 px-4 font-semibold text-[#1a365d]">
+                                عدد السريهات
+                              </th>
+
+                              <th className="py-3 px-4 font-semibold text-[#1a365d]">
+                                الكمية
+                              </th>
+                            </tr>
+                          </thead>
+
+                          <tbody className="divide-y divide-slate-200">
+                            {model.sizes.map((size) => {
+                              const currentSeries =
+                                Number(
+                                  seriesCounts?.[model.id]?.[
+                                    variant.variantKey
+                                  ]?.[size],
+                                ) || 0;
+
+                              return (
+                                <tr
+                                  key={`${model.id}-${variant.variantKey}-${size}`}
+                                  className="hover:bg-slate-50 transition-colors"
+                                >
+                                  <td className="py-4 px-4 text-right">
+                                    <span className="inline-flex min-w-[50px] justify-center px-3 py-2 rounded-lg bg-blue-50 text-[#1a365d] font-bold text-sm border border-blue-100">
+                                      {size}
+                                    </span>
+                                  </td>
+
+                                  <td className="py-4 px-4">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={currentSeries}
+                                      onChange={(e) =>
+                                        handleSeriesChange(
+                                          model.id,
+                                          variant.variantKey,
+                                          size,
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="w-32 border border-slate-300 rounded-md p-2 text-center font-bold text-[#b91c1c] focus:outline-none focus:border-[#1a365d]"
+                                    />
+                                  </td>
+
+                                  <td className="py-4 px-4 font-bold text-lg text-slate-800">
+                                    {currentSeries.toLocaleString()}
+
+                                    <span className="text-xs text-slate-500 font-normal mr-1">
+                                      قطعة
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
 
-          {/* Grand Total */}
+          {/* ==================================================
+              Grand Total
+          ================================================== */}
 
-          <div className="mt-auto bg-slate-50 p-4 rounded-xl border border-slate-200 flex justify-between items-center">
+          <div className="mt-6 bg-slate-50 p-4 rounded-xl border border-slate-200 flex justify-between items-center">
             <span className="text-slate-600 font-bold">
               الإجمالي الكلي للكميات المطلوب تشغيلها:
             </span>
@@ -740,7 +1148,9 @@ const StartOrder = () => {
             </span>
           </div>
 
-          {/* Buttons */}
+          {/* ==================================================
+              Buttons
+          ================================================== */}
 
           <div className="mt-8 pt-6 border-t border-slate-100 flex flex-wrap justify-end gap-3">
             <button
@@ -773,14 +1183,14 @@ const StartOrder = () => {
               onClick={async () => {
                 if (hasInvalidSeries()) {
                   toast.error(
-                    "برجاء التأكد من تحديد عدد سريهات أكبر من صفر لكل لون.",
+                    "برجاء التأكد من تحديد عدد سريهات أكبر من صفر لكل Variant ولكل مقاس.",
                   );
 
                   return;
                 }
 
                 const hasUnpricedModels = collectionInfo.models.some(
-                  (m) => !m.approvedPrice || m.approvedPrice <= 0,
+                  (model) => !model.approvedPrice || model.approvedPrice <= 0,
                 );
 
                 if (hasUnpricedModels) {

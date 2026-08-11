@@ -1,38 +1,72 @@
 import React from "react";
 import logo from "../assets/logo.jpeg";
 
+/* ============================================================
+   Helpers
+============================================================ */
+
 const safeText = (value, fallback = "-") => {
   if (value === null || value === undefined) {
     return fallback;
   }
-
   if (typeof value === "string") {
     return value;
   }
-
   if (typeof value === "number" || typeof value === "boolean") {
     return String(value);
   }
-
   if (Array.isArray(value)) {
     return value
       .map((item) => safeText(item, ""))
       .filter(Boolean)
       .join("، ");
   }
-
   if (typeof value === "object") {
     return Object.keys(value).join("، ");
   }
-
   return fallback;
 };
 
-const getSeries = (seriesCount, modelId, color) => {
-  const value = seriesCount?.[modelId]?.[color];
+/* ============================================================
+   Variant Helpers
+============================================================ */
 
-  return Number(value) || 0;
+const getVariantPart = (variant) => {
+  if (!variant || !Array.isArray(variant.components)) return "موديل كامل";
+  const parts = variant.components.map((c) => c.part).filter(Boolean);
+  return parts.length > 0 ? parts.join(" + ") : "موديل كامل";
 };
+
+const getVariantColor = (variant) => {
+  if (!variant || !Array.isArray(variant.components)) return "غير محدد";
+  const colors = variant.components.map((c) => c.color).filter(Boolean);
+  return colors.length > 0 ? colors.join(" + ") : "غير محدد";
+};
+
+/* ============================================================
+   Get Model Total
+============================================================ */
+
+const getModelTotal = (model, seriesCount) => {
+  if (!Array.isArray(model?.variants) || !Array.isArray(model?.sizes)) {
+    return 0;
+  }
+
+  return model.variants.reduce((total, variant) => {
+    return (
+      total +
+      model.sizes.reduce((sizeTotal, size) => {
+        const qty =
+          Number(seriesCount?.[model.id]?.[variant.variantKey]?.[size]) || 0;
+        return sizeTotal + qty;
+      }, 0)
+    );
+  }, 0);
+};
+
+/* ============================================================
+   Component
+============================================================ */
 
 const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
   if (!data) return null;
@@ -43,35 +77,47 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
   const allColors = new Set();
   const allSizes = new Set();
 
-  data.models.forEach((model) => {
-    model.colors.forEach((color) => {
-      const series = getSeries(seriesCount, model.id, color);
+  /* ========================================================
+       حساب الإجماليات
+    ======================================================== */
 
-      const qty = model.sizes.length * series;
+  (data.models || []).forEach((model) => {
+    const variants = Array.isArray(model.variants) ? model.variants : [];
+    const sizes = Array.isArray(model.sizes) ? model.sizes : [];
 
-      grandTotalQty += qty;
-
-      grandTotalValue += qty * (Number(model.approvedPrice) || 0);
-
-      allColors.add(safeText(color));
+    sizes.forEach((size) => {
+      allSizes.add(safeText(size));
     });
 
-    model.sizes.forEach((size) => {
-      allSizes.add(safeText(size));
+    // 💡 إضافة الإجمالي الخاص بالموديل مباشرة لقيمة العقد الإجمالية
+    grandTotalValue += Number(model.approvedPrice) || 0;
+
+    variants.forEach((variant) => {
+      const part = getVariantPart(variant);
+      const color = getVariantColor(variant);
+
+      if (color !== "غير محدد") {
+        allColors.add(part !== "موديل كامل" ? `${part}: ${color}` : color);
+      }
+
+      sizes.forEach((size) => {
+        const quantity =
+          Number(seriesCount?.[model.id]?.[variant.variantKey]?.[size]) || 0;
+
+        grandTotalQty += quantity;
+      });
     });
   });
 
   const advancePayment = grandTotalValue / 2;
-
   const remainingPayment = grandTotalValue / 2;
-
   const dateObj = new Date();
-
-  const dayName = dateObj.toLocaleDateString("ar-EG", {
-    weekday: "long",
-  });
-
+  const dayName = dateObj.toLocaleDateString("ar-EG", { weekday: "long" });
   const formattedDate = dateObj.toLocaleDateString("en-GB");
+
+  /* ========================================================
+       JSX
+    ======================================================== */
 
   return (
     <div
@@ -164,7 +210,19 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
       {/* ================= Header ================= */}
 
       <div className="flex justify-between items-center mb-3">
-        <div className="w-24"></div>
+        <div className="w-24 flex justify-start">
+          {/* 💡 لوجو البراند هيظهر هنا لو موجود في الداتا */}
+          {data.brandLogo && (
+            <img
+              src={data.brandLogo}
+              alt={safeText(data.brandName)}
+              className="w-16 h-16 object-contain"
+              onError={(e) => {
+                e.target.style.display = "none";
+              }}
+            />
+          )}
+        </div>
 
         <div className="flex-1 text-center">
           <h1 className="text-[16px] font-black blue-text mb-2 tracking-wide">
@@ -176,9 +234,7 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
             {" | "}
             تاريخ العقد: {formattedDate}
             {" | "}
-            مرجع الملف الفني: TP-
-            {safeText(data.brandCode)}
-            -U01/U02/U03
+            مرجع الملف الفني: TP-{safeText(data.brandCode)}-U01/U02/U03
           </h2>
         </div>
 
@@ -208,19 +264,19 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
           <p>
             <span className="font-bold blue-text text-xs">الطرف الأول:</span>{" "}
             شركة الصحابة لإدارة وتصنيع الملابس، ويمثلها في توقيع هذا العقد
-            السيد/ة:{" "}
-            <span className="text-transparent">__________________</span>{" "}
+            السيد/ة:
+            <span className="text-transparent"> ____________________</span>{" "}
             <span className="font-bold blue-text">بصفته/ا:</span>{" "}
-            <span className="text-transparent">__________________</span>
+            <span className="text-transparent">____________________</span>
           </p>
 
           <p>
             <span className="font-bold blue-text text-xs">الطرف الثاني:</span>{" "}
             {safeText(data.brandName)}، ويمثلها السيد/ة: أ. أحمد صبري{" "}
             <span className="font-bold blue-text">بصفته/ا:</span>{" "}
-            <span className="text-transparent">__________________</span>،{" "}
+            <span className="text-transparent">____________________</span>،{" "}
             <span className="font-bold blue-text">سجل تجاري/رقم رسمي:</span>{" "}
-            <span className="text-transparent">__________________</span>
+            <span className="text-transparent">____________________</span>
           </p>
         </div>
 
@@ -243,30 +299,22 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
           <tr>
             <th className="w-20">كود الموديل</th>
-
             <th>المنتج</th>
-
             <th>الخامة</th>
-
             <th>الكمية (قطعة)</th>
-
             <th>سعر الوحدة (ج.م)</th>
-
             <th>الإجمالي (ج.م)</th>
           </tr>
         </thead>
 
         <tbody>
-          {data.models.map((model, idx) => {
-            const qty = model.colors.reduce((total, color) => {
-              const series = getSeries(seriesCount, model.id, color);
+          {(data.models || []).map((model, idx) => {
+            const qty = getModelTotal(model, seriesCount);
 
-              return total + model.sizes.length * series;
-            }, 0);
-
-            const price = Number(model.approvedPrice) || 0;
-
-            const total = qty * price;
+            // 💡 السعر الإجمالي اللي جاي من الداتابيز
+            const total = Number(model.approvedPrice) || 0;
+            // 💡 حساب متوسط سعر القطعة الواحدة
+            const unitPrice = qty > 0 ? total / qty : total;
 
             return (
               <tr key={model.id || idx}>
@@ -282,7 +330,7 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
                 <td className="val-cell">{qty}</td>
 
                 <td className="val-cell">
-                  {price.toLocaleString(undefined, {
+                  {unitPrice.toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
@@ -300,10 +348,11 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
           <tr className="bg-[#fee2e2]">
             <td colSpan="5" className="text-center font-bold text-[#b91c1c]">
-              الإجمالي — {grandTotalQty} قطعة (ألوان:{" "}
-              {Array.from(allColors).join("/")}، مقاسات{" "}
-              {Array.from(allSizes).join("-")}
-              بالتساوي)
+              الإجمالي — {grandTotalQty} قطعة
+              {" | "}
+              الأجزاء والألوان: {Array.from(allColors).join(" / ")}
+              {" | "}
+              المقاسات: {Array.from(allSizes).join(" - ")}
             </td>
 
             <td className="font-black text-[#b91c1c] text-[11px]">
@@ -315,6 +364,89 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
           </tr>
         </tbody>
       </table>
+
+      {/* ================= تفاصيل الموديلات ================= */}
+
+      <div className="mb-4">
+        <div className="bg-[#1a365d] text-white text-center font-bold text-xs p-2">
+          تفاصيل الموديلات والأجزاء والألوان والكميات
+        </div>
+
+        {(data.models || []).map((model) => {
+          const variants = Array.isArray(model.variants) ? model.variants : [];
+          const sizes = Array.isArray(model.sizes) ? model.sizes : [];
+
+          return (
+            <div
+              key={`details-${model.id}`}
+              className="border border-[#1a365d] border-t-0"
+            >
+              <div className="bg-slate-50 p-2 font-bold text-[#1a365d] text-xs">
+                موديل {safeText(model.model_number)}
+                {" — "}
+                {safeText(model.name)}
+              </div>
+
+              <table className="table-bordered mb-0">
+                <thead>
+                  <tr>
+                    <th>الجزء</th>
+                    <th>اللون</th>
+
+                    {sizes.map((size) => (
+                      <th key={safeText(size)}>{safeText(size)}</th>
+                    ))}
+
+                    <th>الإجمالي</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {variants.map((variant, index) => {
+                    const part = getVariantPart(variant);
+                    const color = getVariantColor(variant);
+
+                    const rowTotal = sizes.reduce(
+                      (total, size) =>
+                        total +
+                        (Number(
+                          seriesCount?.[model.id]?.[variant.variantKey]?.[size],
+                        ) || 0),
+                      0,
+                    );
+
+                    return (
+                      <tr key={`${model.id}-${variant.variantKey}-${index}`}>
+                        <td className="val-cell">
+                          {safeText(part, "موديل كامل")}
+                        </td>
+
+                        <td className="val-cell">
+                          {safeText(color, "غير محدد")}
+                        </td>
+
+                        {sizes.map((size) => (
+                          <td key={safeText(size)} className="val-cell">
+                            {Number(
+                              seriesCount?.[model.id]?.[variant.variantKey]?.[
+                                size
+                              ],
+                            ) || 0}
+                          </td>
+                        ))}
+
+                        <td className="font-black text-[#b91c1c]">
+                          {rowTotal}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
+      </div>
 
       {/* ================= الشروط ================= */}
 
@@ -350,8 +482,7 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}{" "}
-              جنيه مصري (معفى من ضريبة القيمة المضافة)، يُسدد على دفعتين: 50%
-              دفعة مقدمة (
+              جنيه مصري، يُسدد على دفعتين: 50% دفعة مقدمة (
               {advancePayment.toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
@@ -370,10 +501,9 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
             <td className="term-title">مدة التنفيذ والتسليم</td>
 
             <td>
-              يلتزم الطرف الأول بتسليم الطلب كاملاً في موعد أقصاه 05/08/2026م،
-              تبدأ من تاريخ استلام الدفعة المقدمة واعتماد العينة والمقاسات معاً.
-              أي تأخير من الطرف الثاني في الاعتماد أو السداد أو إرسال المقاسات
-              يمدد هذا الموعد تلقائياً بمقدار التأخير.
+              يلتزم الطرف الأول بتسليم الطلب كاملاً في الموعد المتفق عليه، وتبدأ
+              مدة التنفيذ من تاريخ استلام الدفعة المقدمة واعتماد العينة
+              والمقاسات معاً.
             </td>
           </tr>
 
@@ -382,9 +512,7 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
             <td>
               يضمن الطرف الأول سلامة القطع المصنعة من عيوب التصنيع فقط، لمدة
-              ____ يوماً من تاريخ التسليم الفعلي. لا يشمل الضمان أي تلف ناتج عن
-              سوء الاستخدام أو الغسيل أو الكي غير السليم أو الاستخدام خارج الغرض
-              المخصص.
+              ____ يوماً من تاريخ التسليم الفعلي.
             </td>
           </tr>
 
@@ -393,9 +521,7 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
             <td>
               يوقع الطرفان عند التسليم على محضر استلام يثبت الكمية المسلمة
-              وحالتها. لا يحق للطرف الثاني طلب استرجاع أو استبدال أي قطعة بعد
-              التوقيع على المحضر إلا في حال ثبوت عيب تصنيع فعلي يقع ضمن نطاق
-              الضمان.
+              وحالتها.
             </td>
           </tr>
 
@@ -403,9 +529,8 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
             <td className="term-title">التعديلات</td>
 
             <td>
-              أي طلب تعديل على المواصفات أو الكميات يرد بعد اعتماد العينة و/أو
-              بعد بدء الإنتاج، يُحتسب له تكلفة إضافية ويمدد أجل التنفيذ بما
-              يلزم، ولا يُعتمد أي تعديل إلا بموافقة خطية صادرة عن الطرفين معاً.
+              أي طلب تعديل على المواصفات أو الكميات بعد اعتماد العينة و/أو بدء
+              الإنتاج يُحتسب له تكلفة إضافية ويمدد أجل التنفيذ بما يلزم.
             </td>
           </tr>
 
@@ -414,9 +539,8 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
             <td>
               لا يُعد أي من الطرفين مخالفاً لالتزاماته حال تعذر التنفيذ لظروف
-              قاهرة خارجة عن إرادته (يُعلق العقد تلقائياً طوال استمرارها).
-              ويلتزم الطرفان بسرية تامة لكافة المعلومات والتصاميم والأسعار،
-              وتبقى شعارات وتصاميم كل طرف مملوكة له حصرياً.
+              قاهرة خارجة عن إرادته. ويلتزم الطرفان بسرية كافة المعلومات
+              والتصاميم والأسعار.
             </td>
           </tr>
 
@@ -424,10 +548,8 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
             <td className="term-title">القانون المختص ونسخ العقد</td>
 
             <td>
-              يخضع هذا العقد لأحكام القوانين المعمول بها في _______________ ،
-              وتختص بالفصل في أي نزاع محاكم _______________ وحدها، بعد محاولة حل
-              ودي خلال 15 يوماً. حُرر من نسختين متطابقتين بيد كل طرف، ويُعد
-              الملف الفني ملحقاً موقعاً جزءاً لا يتجزأ منه.
+              يخضع الطرفان للقوانين المعمول بها في __________، وتختص بالفصل في
+              أي نزاع محاكم __________.
             </td>
           </tr>
         </tbody>
@@ -450,14 +572,15 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
         <tbody>
           <tr>
-            <td className="text-right p-4 align-top border-slate-300">
+            <td className="text-right p-4 align-top">
               <div className="space-y-4 font-bold text-[11px] blue-text">
                 <p>الاسم: أ. أحمد صبري</p>
 
                 <p>
-                  التوقيع والختم:{" "}
+                  التوقيع والختم:
                   <span className="text-transparent">
-                    ________________________
+                    {" "}
+                    ______________________
                   </span>
                 </p>
 
@@ -465,19 +588,21 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
               </div>
             </td>
 
-            <td className="text-right p-4 align-top border-slate-300">
+            <td className="text-right p-4 align-top">
               <div className="space-y-4 font-bold text-[11px] blue-text">
                 <p>
-                  الاسم:{" "}
+                  الاسم:
                   <span className="text-transparent">
-                    ________________________
+                    {" "}
+                    ______________________
                   </span>
                 </p>
 
                 <p>
-                  التوقيع والختم:{" "}
+                  التوقيع والختم:
                   <span className="text-transparent">
-                    ________________________
+                    {" "}
+                    ______________________
                   </span>
                 </p>
 

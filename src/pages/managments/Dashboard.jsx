@@ -114,6 +114,10 @@ const Dashboard = () => {
           // ترجمة الحالة هنا
           if (phase === "draft") phase = "مسودة";
           if (phase === "completed" || phase === "مكتمل") phase = "تم الانجاز";
+          if (phase === "in_progress") phase = "قيد التشغيل";
+          if (phase === "paused") phase = "متوقف";
+          if (phase === "pending") phase = "بانتظار";
+          if (phase === "cancelled") phase = "ملغي";
 
           let color = "bg-slate-100 text-slate-700";
           if (

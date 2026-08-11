@@ -136,7 +136,7 @@ const QuotationModal = ({ selectedQuote, handleCloseModal, handlePrint }) => {
               </div>
               <div>
                 <div className="text-xs text-slate-500 mb-1 font-medium">
-                  سعر البيع النهائي
+                  سعر القطعة
                 </div>
                 <div className="font-extrabold text-lg text-emerald-600 tracking-tight">
                   {Number(selectedQuote.finalPrice).toLocaleString()} ج.م

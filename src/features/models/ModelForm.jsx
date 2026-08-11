@@ -30,6 +30,7 @@ const ModelForm = ({ activeModel, onModelChange, brandName }) => {
     closeUpPreviews,
     handleCloseUpChange,
     removeCloseUpImage,
+    handleUpdateTechPack,
   } = useModelForm(activeModel, onModelChange, brandName);
 
   if (!activeModel) return null;
@@ -81,6 +82,7 @@ const ModelForm = ({ activeModel, onModelChange, brandName }) => {
         isGenerating={isGenerating}
         handleSubmitAndGenerate={handleSubmitAndGenerate}
         brandName={brandName}
+        handleUpdateTechPack={handleUpdateTechPack}
       />
     </div>
   );

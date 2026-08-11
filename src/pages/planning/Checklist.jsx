@@ -537,7 +537,10 @@ const Checklist = () => {
                                 key={material.id || idx}
                                 className="font-bold text-slate-700 text-xs"
                               >
-                                {material.name}
+                                {material.name} -{" "}
+                                {material.weight !== null
+                                  ? `${material.weight} جرام`
+                                  : "وزن غير محدد"}
                                 {idx < model.materials.length - 1 ? " + " : ""}
                               </span>
                             ))}

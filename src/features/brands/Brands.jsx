@@ -1,21 +1,44 @@
 import React, { useEffect, useState } from "react";
 import AddNewBrand from "../../Modals/AddNewBrand";
+import CreateClientAccount from "../../Modals/CreateClientAccount";
+
 import {
   handleGetAllBrands,
   handleDeleteBrand,
 } from "../../services/brandsService";
-import { Trash2 } from "lucide-react";
+
+import { Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Link, useLocation } from "react-router-dom";
+
 const Brands = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [brands, setBrands] = useState([]);
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-
+  const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
+  const [selectedBrand, setSelectedBrand] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
+
+  const handleOpenCreateAccount = (brand) => {
+    setSelectedBrand(brand);
+    setIsCreateAccountOpen(true);
+  };
+
+  const handleAccountCreated = (updatedBrand) => {
+    setBrands((prevBrands) =>
+      prevBrands.map((brand) =>
+        brand.id === updatedBrand.id
+          ? {
+              ...brand,
+              portal_user_id: updatedBrand.portal_user_id,
+            }
+          : brand,
+      ),
+    );
+  };
 
   useEffect(() => {
     handleGetAllBrands().then((data) => {
@@ -154,13 +177,33 @@ const Brands = () => {
                   {brand.collections?.length || 0} كولكشن
                 </p>
                 <div className="flex gap-3 items-center">
+                  {/* إنشاء حساب العميل */}
+
+                  {!brand.client_portal_user_id ? (
+                    <button
+                      onClick={() => handleOpenCreateAccount(brand)}
+                      className="rounded-lg bg-[#1a365d] px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-900 flex items-center gap-2"
+                    >
+                      <UserPlus size={17} />
+                      إنشاء حساب للعميل
+                    </button>
+                  ) : (
+                    <span className="rounded-lg bg-emerald-50 border border-emerald-100 px-4 py-2 text-sm font-bold text-emerald-700">
+                      حساب العميل موجود✓
+                    </span>
+                  )}
+
+                  {/* فتح */}
+
                   <Link
-                    // 💡 هنا بنقص الرابط من عند آخر "/" ونحط المسار الجديد مباشرة
                     to={`${location.pathname.substring(0, location.pathname.lastIndexOf("/"))}/edit_brands/${brand.id}`}
                     className="rounded-lg bg-slate-100 border border-slate-200 px-6 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-200 hover:text-[#1a365d]"
                   >
                     فتح
                   </Link>
+
+                  {/* حذف */}
+
                   <button
                     onClick={() => handleDelete(brand.id)}
                     className="w-fit bg-[#b91c1c] border border-[#b91c1c] text-white hover:bg-white hover:text-[#b91c1c] p-2.5 rounded-lg text-xs font-bold transition-colors flex items-center justify-center"
@@ -213,6 +256,14 @@ const Brands = () => {
         <AddNewBrand
           isAddModalOpen={isAddModalOpen}
           setIsAddModalOpen={setIsAddModalOpen}
+        />
+      )}
+      {isCreateAccountOpen && selectedBrand && (
+        <CreateClientAccount
+          isOpen={isCreateAccountOpen}
+          setIsCreateAccountOpen={setIsCreateAccountOpen}
+          brand={selectedBrand}
+          onAccountCreated={handleAccountCreated}
         />
       )}
     </div>

@@ -140,13 +140,10 @@ export const handleIssueOrderToPlanning = async (
     let grandTotalAmount = 0;
 
     // ============================================================
-    // 1. جلب المقاسات من قاعدة البيانات
+    // 1. جلب المقاسات
     // ============================================================
 
-    const {
-      data: dbSizes,
-      error: fetchSizesError,
-    } = await supabase
+    const { data: dbSizes, error: fetchSizesError } = await supabase
       .from("sizes")
       .select("id, name");
 
@@ -155,37 +152,173 @@ export const handleIssueOrderToPlanning = async (
     }
 
     // ============================================================
-    // 2. حساب الإجماليات
-    //
-    // كل لون له عدد سريهات مختلف
+    // Helpers
     // ============================================================
 
-    for (const model of collectionInfo.models) {
-      for (const color of model.colors) {
-        const colorSeries =
-          Number(
-            seriesCounts?.[model.id]?.[color]
-          ) || 0;
+    const getComponentVariantKey = (component, fallbackIndex = 1) => {
+      if (component && typeof component === "object") {
+        return Number(
+          component.variant_key ??
+          component.variant ??
+          component.variantKey ??
+          fallbackIndex
+        );
+      }
 
-        if (colorSeries <= 0) {
-          throw new Error(
-            `عدد السريهات للون "${color}" في الموديل "${model.name}" يجب أن يكون أكبر من صفر.`
-          );
+      return fallbackIndex;
+    };
+
+    const getComponentPart = (component) => {
+      if (!component || typeof component !== "object") {
+        return "";
+      }
+
+      return (
+        component.part ??
+        component.part_name ??
+        component.partName ??
+        component.type ??
+        ""
+      );
+    };
+
+    const getComponentColor = (component) => {
+      if (typeof component === "string") {
+        return component;
+      }
+
+      if (!component || typeof component !== "object") {
+        return "";
+      }
+
+      return (
+        component.color ??
+        component.colors ??
+        component.colour ??
+        component.color_name ??
+        ""
+      );
+    };
+
+    // ============================================================
+    // 2. تجهيز Variants لكل موديل
+    //
+    // كل Variant عبارة عن مجموعة Components.
+    //
+    // مثال:
+    //
+    // Variant 1:
+    //   تيشيرت / بينك
+    //   بنطلون / أسود
+    //
+    // Variant 2:
+    //   تيشيرت / رمادي
+    //   بنطلون / أبيض
+    // ============================================================
+
+    const preparedModels = collectionInfo.models.map((model) => {
+      const components = Array.isArray(model.colors)
+        ? model.colors
+        : [];
+
+      const variantsMap = new Map();
+
+      components.forEach((component, index) => {
+        const variantKey = getComponentVariantKey(component, 1);
+
+        const part = getComponentPart(component);
+        const color = getComponentColor(component);
+
+        if (!color) {
+          return;
         }
 
-        const colorQty =
-          model.sizes.length * colorSeries;
+        if (!variantsMap.has(variantKey)) {
+          variantsMap.set(variantKey, []);
+        }
 
-        grandTotalQty += colorQty;
+        variantsMap.get(variantKey).push({
+          ...component,
+          variant_key: variantKey,
+          part,
+          color: String(color).trim(),
+        });
+      });
+
+      // لو مفيش components
+      if (variantsMap.size === 0) {
+        variantsMap.set(1, [
+          {
+            variant_key: 1,
+            part: "",
+            color: "غير محدد",
+          },
+        ]);
+      }
+
+      return {
+        ...model,
+        variants: Array.from(variantsMap.entries()).map(
+          ([variantKey, variantComponents]) => ({
+            variantKey: Number(variantKey),
+            components: variantComponents,
+          })
+        ),
+      };
+    });
+
+    // ============================================================
+    // 3. التحقق + حساب إجماليات الـ Variants
+    //
+    // مهم:
+    // هنا بنحسب الكمية مرة واحدة للـ Variant.
+    //
+    // مش:
+    // تيشيرت 10 + بنطلون 10 = 20
+    //
+    // لكن:
+    // Variant = 10 قطعة
+    // ============================================================
+
+    for (const model of preparedModels) {
+      for (const variant of model.variants) {
+        let variantQty = 0;
+
+        for (const size of model.sizes) {
+          const series =
+            Number(
+              seriesCounts?.[model.id]?.[variant.variantKey]?.[size]
+            ) || 0;
+
+          if (series <= 0) {
+            const componentNames = variant.components
+              .map((component) => {
+                const part = component.part;
+                const color = component.color;
+
+                return part
+                  ? `${part} - ${color}`
+                  : color;
+              })
+              .join(" + ");
+
+            throw new Error(
+              `عدد السريهات للموديل "${model.name}" - ${componentNames} - المقاس "${size}" يجب أن يكون أكبر من صفر.`
+            );
+          }
+
+          variantQty += series;
+        }
+
+        grandTotalQty += variantQty;
 
         grandTotalAmount +=
-          colorQty *
-          (Number(model.approvedPrice) || 0);
+          variantQty * (Number(model.approvedPrice) || 0);
       }
     }
 
     // ============================================================
-    // 3. البحث عن أمر تشغيل موجود
+    // 4. البحث عن أمر تشغيل موجود
     // ============================================================
 
     const {
@@ -194,10 +327,7 @@ export const handleIssueOrderToPlanning = async (
     } = await supabase
       .from("production_orders")
       .select("id")
-      .eq(
-        "collection_id",
-        collectionInfo.id
-      )
+      .eq("collection_id", collectionInfo.id)
       .maybeSingle();
 
     if (checkError) {
@@ -207,22 +337,19 @@ export const handleIssueOrderToPlanning = async (
     let orderId;
 
     // ============================================================
-    // 4. تحديث أمر موجود أو إنشاء أمر جديد
+    // 5. تحديث أو إنشاء أمر التشغيل
     // ============================================================
 
     if (existingOrder) {
       orderId = existingOrder.id;
 
-      const {
-        error: updateError,
-      } = await supabase
+      const { error: updateError } = await supabase
         .from("production_orders")
         .update({
           status: "pending",
           total_quantity: grandTotalQty,
           total_amount: grandTotalAmount,
-          updated_at:
-            new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         })
         .eq("id", orderId);
 
@@ -230,45 +357,29 @@ export const handleIssueOrderToPlanning = async (
         throw updateError;
       }
 
-      // حذف العناصر القديمة
-      const {
-        error: deleteError,
-      } = await supabase
+      const { error: deleteError } = await supabase
         .from("production_order_items")
         .delete()
-        .eq(
-          "production_order_id",
-          orderId
-        );
+        .eq("production_order_id", orderId);
 
       if (deleteError) {
         throw deleteError;
       }
     } else {
-      const {
-        data: newOrder,
-        error: insertError,
-      } = await supabase
-        .from("production_orders")
-        .insert({
-          collection_id:
-            collectionInfo.id,
-
-          status: "pending",
-
-          total_quantity:
-            grandTotalQty,
-
-          total_amount:
-            grandTotalAmount,
-
-          order_number:
-            `PO-${collectionInfo.brandCode}-${new Date().getFullYear()}-${Math.floor(
+      const { data: newOrder, error: insertError } =
+        await supabase
+          .from("production_orders")
+          .insert({
+            collection_id: collectionInfo.id,
+            status: "pending",
+            total_quantity: grandTotalQty,
+            total_amount: grandTotalAmount,
+            order_number: `PO-${collectionInfo.brandCode}-${new Date().getFullYear()}-${Math.floor(
               1000 + Math.random() * 9000
             )}`,
-        })
-        .select()
-        .single();
+          })
+          .select()
+          .single();
 
       if (insertError) {
         throw insertError;
@@ -278,152 +389,161 @@ export const handleIssueOrderToPlanning = async (
     }
 
     // ============================================================
-    // 5. إنشاء Production Order Item لكل موديل + لون
+    // 6. إنشاء Production Order Items
+    //
+    // كل Component له Row مستقل
+    //
+    // لكن Components الخاصة بنفس Variant
+    // تأخذ نفس variant_key
     // ============================================================
 
-    for (const model of collectionInfo.models) {
-      for (const color of model.colors) {
-        // ========================================================
-        // عدد السريهات الخاص بهذا اللون تحديدًا
-        // ========================================================
+    for (const model of preparedModels) {
+      for (const variant of model.variants) {
+        // --------------------------------------------------------
+        // حساب إجمالي الـ Variant مرة واحدة
+        // --------------------------------------------------------
 
-        const colorSeries =
-          Number(
-            seriesCounts?.[model.id]?.[color]
-          ) || 0;
+        let variantQty = 0;
 
-        if (colorSeries <= 0) {
-          throw new Error(
-            `عدد السريهات للون "${color}" في الموديل "${model.name}" يجب أن يكون أكبر من صفر.`
-          );
+        for (const size of model.sizes) {
+          const series =
+            Number(
+              seriesCounts?.[model.id]?.[variant.variantKey]?.[size]
+            ) || 0;
+
+          variantQty += series;
         }
 
-        // ========================================================
-        // إجمالي هذا اللون
-        //
-        // مثال:
-        // S M L XL = 4 مقاسات
-        // 3 سريهات
-        //
-        // 4 × 3 = 12 قطعة
-        // ========================================================
+        // --------------------------------------------------------
+        // إنشاء Row لكل Component
+        // --------------------------------------------------------
 
-        const colorQty =
-          model.sizes.length *
-          colorSeries;
+        for (const component of variant.components) {
+          const part = component.part || null;
+          const color = component.color || null;
 
-        // ========================================================
-        // إنشاء item مستقل للون
-        // ========================================================
+          const { data: itemData, error: itemError } =
+            await supabase
+              .from("production_order_items")
+              .insert({
+                production_order_id: orderId,
+                model_id: model.real_id || model.id,
 
-        const {
-          data: itemData,
-          error: itemError,
-        } = await supabase
-          .from("production_order_items")
-          .insert({
-            production_order_id:
-              orderId,
+                // نفس الـ Variant لكل أجزاء التركيبة
+                variant_key: variant.variantKey,
 
-            model_id:
-              model.real_id ||
-              model.id,
+                // السعر الخاص بالموديل
+                selling_price:
+                  Number(model.approvedPrice) || 0,
 
-            color: color,
+                // كمية هذا الـ Component
+                // وهي نفس كمية الـ Variant
+                total_quantity: variantQty,
 
-            total_quantity:
-              colorQty,
+                part,
+                color,
 
-            selling_price:
-              Number(
-                model.approvedPrice
-              ) || 0,
-          })
-          .select()
-          .single();
+                // الأعمدة القديمة غير المستخدمة في الـ structure الجديدة
+                size: null,
+                quantity: null,
+              })
+              .select()
+              .single();
 
-        if (itemError) {
-          throw itemError;
-        }
+          if (itemError) {
+            throw itemError;
+          }
 
-        const itemId = itemData.id;
+          const itemId = itemData.id;
 
-        // ========================================================
-        // 6. ربط المقاسات بالـ item
-        //
-        // كل مقاس يأخذ عدد السريهات الخاص باللون
-        // ========================================================
+          // ======================================================
+          // 7. حفظ المقاسات
+          //
+          // نفس كميات الـ Variant لكل Component
+          //
+          // مثال:
+          //
+          // Variant = تيشيرت + بنطلون
+          //
+          // S = 10
+          //
+          // يتسجل:
+          //
+          // تيشيرت → S = 10
+          // بنطلون → S = 10
+          //
+          // لكن production_orders.total_quantity = 10 فقط
+          // ======================================================
 
-        const sizesData =
-          model.sizes.map(
-            (sizeName) => {
+          const sizesData = model.sizes.map((sizeName) => {
+            const matchedSize = dbSizes.find(
+              (dbSize) =>
+                String(dbSize.name)
+                  .trim()
+                  .toLowerCase() ===
+                String(sizeName)
+                  .trim()
+                  .toLowerCase()
+            );
 
-              const matchedSize =
-                dbSizes.find(
-                  (dbSize) =>
-                    String(
-                      dbSize.name
-                    )
-                      .trim()
-                      .toLowerCase() ===
-                    String(
-                      sizeName
-                    )
-                      .trim()
-                      .toLowerCase()
-                );
-
-              if (!matchedSize) {
-                throw new Error(
-                  `المقاس "${sizeName}" غير مسجل في جدول المقاسات بالداتابيز.`
-                );
-              }
-
-              return {
-                production_order_item_id:
-                  itemId,
-
-                size_id:
-                  matchedSize.id,
-
-                quantity:
-                  colorSeries,
-              };
+            if (!matchedSize) {
+              throw new Error(
+                `المقاس "${sizeName}" غير مسجل في جدول المقاسات.`
+              );
             }
-          );
 
-        // ========================================================
-        // 7. حفظ المقاسات
-        // ========================================================
+            const quantity =
+              Number(
+                seriesCounts?.[model.id]?.[
+                variant.variantKey
+                ]?.[sizeName]
+              ) || 0;
 
-        const {
-          error: sizesError,
-        } = await supabase
-          .from(
-            "production_order_item_sizes"
-          )
-          .insert(sizesData);
+            return {
+              production_order_item_id: itemId,
+              size_id: matchedSize.id,
+              quantity,
+            };
+          });
 
-        if (sizesError) {
-          throw sizesError;
+          const { error: sizesError } = await supabase
+            .from("production_order_item_sizes")
+            .insert(sizesData);
+
+          if (sizesError) {
+            throw sizesError;
+          }
         }
       }
     }
 
     // ============================================================
-    // 8. إرجاع النتيجة
+    // 8. System Log
+    // ============================================================
+
+    await addSystemLog({
+      module: "customer_service",
+      action_type: "CREATE",
+      entity_type: "production_order",
+      entity_id: orderId,
+      title: "إصدار أمر تشغيل",
+      description: `تم إصدار أمر تشغيل للكولكشن "${collectionInfo.collectionName}".`,
+      details: {
+        total_quantity: grandTotalQty,
+        total_amount: grandTotalAmount,
+      },
+    });
+
+    // ============================================================
+    // 9. Return
     // ============================================================
 
     return {
       id: orderId,
-      totalQuantity:
-        grandTotalQty,
-      totalAmount:
-        grandTotalAmount,
+      totalQuantity: grandTotalQty,
+      totalAmount: grandTotalAmount,
     };
-
   } catch (error) {
-
     console.error(
       "Error issuing order to planning:",
       error

@@ -13,6 +13,7 @@ const TechPackSection = ({
   isGenerating,
   handleSubmitAndGenerate,
   brandName,
+  handleUpdateTechPack,
 }) => {
   const [chatMessage, setChatMessage] = useState("");
   const [isModifying, setIsModifying] = useState(false);
@@ -137,7 +138,13 @@ const TechPackSection = ({
                 {isGenerating ? "🤖 جاري التوليد..." : "إنشاء الـ Tech Pack"}
               </button>
             )}
-
+          <button
+            type="button"
+            className="px-4 py-2 bg-[#1a365d] text-white rounded-lg font-bold"
+            onClick={handleUpdateTechPack}
+          >
+            تحديث الـ Tech Pack
+          </button>
           {(activeModel.tech_pack_status === "created" ||
             activeModel.tech_pack_status === "approved") && (
             <button

@@ -230,34 +230,110 @@ export const pricingService = {
     }
   },
 
-  // 7. جلب بيانات הـ PDF (الصور والخامات من الـ JSON المربوط بالموديلات)
   fetchQuotationDetailsForPDF: async (collectionId) => {
     try {
-      const { data: modelsData, error } = await supabase
+      // ============================================
+      // 1. جلب الموديلات وبيانات الـ Tech Pack والبراند
+      // ============================================
+
+      const { data: modelsData, error: modelsError } = await supabase
         .from("models")
         .select(`
         model_number,
         image_url,
-        tech_packs ( content ),
-        collections ( department )
+        tech_packs (
+          content
+        ),
+        collections (
+          department,
+          brands (
+            name_ar,
+            logo_url
+          )
+        )
       `)
         .eq("collection_id", collectionId);
 
-      if (error) throw error;
+      if (modelsError) throw modelsError;
+
+      // ============================================
+      // 2. جلب عرض السعر وعناصره
+      // ============================================
+
+      const { data: quotationData, error: quotationError } = await supabase
+        .from("quotations")
+        .select(`
+        id,
+        total_sales_price,
+        quotation_items (
+          model_id,
+          selling_price
+        )
+      `)
+        .eq("collection_id", collectionId)
+        .single();
+
+      if (quotationError && quotationError.code !== "PGRST116") {
+        throw quotationError;
+      }
+
+      // ============================================
+      // 3. حساب متوسط سعر الموديلات
+      // ============================================
+
+      const quotationItems = quotationData?.quotation_items || [];
+
+      const validPrices = quotationItems
+        .map((item) => Number(item.selling_price))
+        .filter((price) => Number.isFinite(price));
+
+      let averagePrice = 0;
+
+      if (validPrices.length > 0) {
+        const totalPrices = validPrices.reduce(
+          (sum, price) => sum + price,
+          0
+        );
+
+        averagePrice = totalPrices / validPrices.length;
+      }
+
+      // ============================================
+      // 4. البيانات الأساسية للـ PDF
+      // ============================================
 
       let specs = {
         category: "أولادي",
         department: "غير محدد",
         main_fabric: "ميلتون مكستر",
         fabric_weight: "330 جرام",
-        sizes: []
+        sizes: [],
       };
 
+      const allSizes = [];
+
       // ============================================
-      // تجميع المقاسات من جميع الموديلات
+      // 5. استخراج بيانات البراند
       // ============================================
 
-      const allSizes = [];
+      let brandName = "---";
+      let brandLogo = null;
+
+      if (modelsData && modelsData.length > 0) {
+        const collectionRelation =
+          modelsData[0].collections || modelsData[0].collection;
+
+        const brandRelation = collectionRelation?.brands;
+
+        if (brandRelation) {
+          brandName = brandRelation.name_ar || "---";
+          brandLogo = brandRelation.logo_url || null;
+        }
+      }
+
+      // ============================================
+      // 6. قراءة بيانات الموديلات
+      // ============================================
 
       if (modelsData && modelsData.length > 0) {
         // ============================================
@@ -274,7 +350,7 @@ export const pricingService = {
         }
 
         // ============================================
-        // المرور على كل الموديلات
+        // المرور على الموديلات
         // ============================================
 
         modelsData.forEach((model) => {
@@ -350,7 +426,7 @@ export const pricingService = {
           }
 
           // ============================================
-          // SIZES - من كل موديل
+          // Sizes
           // ============================================
 
           let modelSizes = [];
@@ -390,28 +466,28 @@ export const pricingService = {
       }
 
       // ============================================
-      // إزالة المقاسات المكررة
+      // 7. إزالة المقاسات المكررة
       // ============================================
 
       specs.sizes = [...new Set(allSizes)];
-
-      // ============================================
-      // لو مفيش مقاسات
-      // ============================================
 
       if (specs.sizes.length === 0) {
         specs.sizes = ["غير محدد"];
       }
 
       // ============================================
-      // الصور
+      // 8. الصور
       // ============================================
 
       const defaultImage =
         "https://placehold.co/400x600/f8fafc/1e293b?text=صورة+الموديل";
 
+      // ============================================
+      // 9. البيانات النهائية للـ PDF
+      // ============================================
+
       return {
-        models: modelsData.map((m) => ({
+        models: (modelsData || []).map((m) => ({
           model_number: m.model_number,
           image_url: m.image_url
             ? m.image_url
@@ -420,8 +496,33 @@ export const pricingService = {
 
         ...specs,
 
-        // نحولها String عشان الـ PDF يعرضها بسهولة
+        // ============================================
+        // بيانات البراند
+        // ============================================
+
+        brand: brandName,
+        brand_logo: brandLogo,
+
+        // ============================================
+        // المقاسات
+        // ============================================
+
         sizes: specs.sizes.join(" / "),
+
+        // ============================================
+        // السعر المعروض في الـ PDF
+        // متوسط أسعار الموديلات
+        // ============================================
+
+        finalPrice: averagePrice,
+
+        // السعر الإجمالي الأصلي
+        totalPrice: Number(
+          quotationData?.total_sales_price || 0
+        ),
+
+        // عدد الموديلات التي دخلت في حساب المتوسط
+        modelsCount: validPrices.length,
       };
     } catch (err) {
       console.error(
@@ -436,6 +537,15 @@ export const pricingService = {
         main_fabric: "-",
         fabric_weight: "-",
         sizes: "-",
+
+        // بيانات البراند
+        brand: "---",
+        brand_logo: null,
+
+        // بيانات السعر
+        finalPrice: 0,
+        totalPrice: 0,
+        modelsCount: 0,
       };
     }
   },

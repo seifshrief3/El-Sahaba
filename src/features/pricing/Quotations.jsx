@@ -90,6 +90,7 @@ const Quotations = () => {
 
   const handleOpenModal = async (quote) => {
     setIsFetchingDetails(true);
+
     try {
       const details = await pricingService.fetchQuotationDetailsForPDF(
         quote.collection_id,
@@ -97,14 +98,41 @@ const Quotations = () => {
 
       const fullQuoteData = {
         ...quote,
+
+        // =========================
+        // بيانات الموديلات
+        // =========================
         models: details.models,
+
+        // =========================
+        // بيانات المنتج
+        // =========================
         category: details.category,
         department: details.department,
         main_fabric: details.main_fabric,
         fabric_weight: details.fabric_weight,
         sizes: details.sizes,
+
+        // =========================
+        // بيانات البراند
+        // =========================
+        brand: details.brand || quote.brand || "---",
+        brand_logo: details.brand_logo || null,
+
+        // =========================
+        // الكمية
+        // =========================
         min_qty: quote.expected_quantity || "500 قطعة",
+
+        // =========================
+        // السعر
+        // =========================
+        finalPrice: details.finalPrice,
+        totalPrice: details.totalPrice,
+        modelsCount: details.modelsCount,
       };
+
+      console.log("FULL QUOTE DATA:", fullQuoteData);
 
       setSelectedQuote(fullQuoteData);
       setIsModalOpen(true);

@@ -1,27 +1,32 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { handleUpdateModelAndGenerateTechPack, handleUpdateModelRelations } from "../services/modelService";
+import { supabase } from "../../supabase";
 
 export const useModelForm = (activeModel, onModelChange, brandName) => {
   // ==========================================
   // 1. States للبيانات الأساسية والصورة
   // ==========================================
-  console.log(activeModel)
   const [modelName, setModelName] = useState(activeModel?.name || "");
   const [notes, setNotes] = useState(activeModel?.customer_notes || "");
 
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(activeModel?.image_url || null);
   const [isGenerating, setIsGenerating] = useState(false);
-
+  const [isUpdating, setIsUpdating] = useState(false);
   // States لصور التفاصيل
   const [closeUpFiles, setCloseUpFiles] = useState([]);
   const [closeUpPreviews, setCloseUpPreviews] = useState(activeModel?.close_up_images || []);
 
   // States للبيانات الفرعية
   const [fabrics, setFabrics] = useState([{ name: "", weight: "" }]);
-  const [colors, setColors] = useState([""]);
-  const [selectedSizes, setSelectedSizes] = useState([]);
+  const [colors, setColors] = useState([
+    {
+      variant: 1,
+      part: "",
+      color: ""
+    }
+  ]); const [selectedSizes, setSelectedSizes] = useState([]);
 
   const sizesList = [
     "6 شهور", "9 شهور", "12 شهور", "18 شهور", "24 شهور", "2 سنوات",
@@ -40,8 +45,33 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
     setCloseUpPreviews(activeModel?.close_up_images || []);
 
     // 1. الألوان
-    setColors(activeModel?.colors?.length > 0 ? activeModel.colors : [""]);
+    let parsedColors = [
+      {
+        variant: 1,
+        part: "",
+        color: ""
+      }
+    ];
+    if (activeModel?.colors?.length > 0) {
+      parsedColors = activeModel.colors.map((item) => {
+        // دعم الداتا القديمة لو كانت ["أبيض", "أسود"]
+        if (typeof item === "string") {
+          return {
+            variant: 1,
+            part: "",
+            color: item,
+          };
+        }
 
+        return {
+          variant: Number(item?.variant) || 1,
+          part: item?.part || "",
+          color: item?.color || "",
+        };
+      });
+    }
+
+    setColors(parsedColors);
     // 2. الخامات والمقاسات (مستخبية جوه الـ description)
     // 2. الخامات والمقاسات (مستخبية جوه الـ description)
     let parsedFabrics = [{ name: "", weight: "" }];
@@ -150,12 +180,33 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
   // ==========================================
   // 3. إدارة الألوان
   // ==========================================
-  const addColor = () => setColors([...colors, ""]);
-  const updateColor = (index, value) => {
+  const addColor = () => {
+    const lastVariant =
+      colors.length > 0
+        ? Number(colors[colors.length - 1]?.variant) || 1
+        : 1;
+
+    setColors([
+      ...colors,
+      {
+        variant: lastVariant,
+        part: "",
+        color: "",
+      },
+    ]);
+  };
+
+  const updateColor = (index, field, value) => {
     const updatedColors = [...colors];
-    updatedColors[index] = value;
+
+    updatedColors[index] = {
+      ...updatedColors[index],
+      [field]: value,
+    };
+
     setColors(updatedColors);
   };
+
   const removeColor = (index) => {
     setColors(colors.filter((_, i) => i !== index));
   };
@@ -226,7 +277,9 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
         image_url: finalImageUrl,
         close_up_images: finalCloseUpUrls,
         fabrics: fabrics.filter(f => f.name !== ""),
-        colors: colors.filter(c => c !== ""),
+        colors: colors.filter(
+          (item) => item.part?.trim() || item.color?.trim()
+        ),
         selectedSizes: selectedSizes,
         brand_name: brandName,
         collection_id: activeModel.collection_id
@@ -247,7 +300,7 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
       onModelChange("colors", payload.colors);
       onModelChange("sizes", payload.selectedSizes);
       // تحديث الـ description محلياً كمان كاحتياطي
-      onModelChange("description", JSON.stringify({ fabrics: payload.fabrics, colors: payload.colors }));
+      onModelChange("description", JSON.stringify({ fabrics: payload.fabrics, colors: payload.colors, sizes: payload.selectedSizes }));
       onModelChange("hasError", false);
 
       setCloseUpFiles([]);
@@ -258,6 +311,139 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
     } catch (error) {
       console.error(error);
       toast.error("حدث خطأ أثناء الإنشاء أو الاتصال بالخادم");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleUpdateTechPack = async () => {
+    try {
+      setIsGenerating(true);
+
+      // 1. البيانات الحالية التي عدلها المستخدم في الفورم
+      const payload = {
+        name: modelName,
+        notes: notes,
+        image_url: activeModel.image_url,
+        close_up_images: closeUpPreviews.filter(
+          (p) => typeof p === "string" && p.startsWith("http")
+        ),
+        fabrics: fabrics.filter((f) => f.name?.trim()),
+        colors: colors.filter(
+          (item) => item.part?.trim() || item.color?.trim()
+        ),
+        selectedSizes,
+      };
+
+      // 2. حفظ التعديلات في جدول models
+      const { data: updatedModel, error: modelError } = await supabase
+        .from("models")
+        .update({
+          name: payload.name,
+          customer_notes: payload.notes,
+          image_url: payload.image_url,
+          close_up_images: payload.close_up_images,
+          colors: payload.colors,
+
+          description: JSON.stringify({
+            fabrics: payload.fabrics,
+            colors: payload.colors,
+            sizes: payload.selectedSizes,
+          }),
+
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", activeModel.id)
+        .select()
+        .single();
+
+      if (modelError) throw modelError;
+
+      // 3. تحديث علاقات المقاسات والخامات
+      await handleUpdateModelRelations(
+        activeModel.id,
+        payload.fabrics,
+        payload.selectedSizes
+      );
+
+      // 4. هات آخر Tech Pack موجود
+      const { data: latestTechPack, error: techPackError } = await supabase
+        .from("tech_packs")
+        .select("content")
+        .eq("model_id", activeModel.id)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (techPackError) throw techPackError;
+
+      // 5. احتفظ بكل بيانات الـ Tech Pack القديمة
+      const oldContent = latestTechPack?.content || {};
+
+      // 6. اعمل نسخة جديدة من الـ Tech Pack
+      // ونغيّر فقط البيانات التي عدّلها المستخدم
+      const techPackContent = {
+        ...oldContent,
+
+        basic_info: {
+          ...(oldContent.basic_info || {}),
+
+          product_name: updatedModel.name,
+          brand: brandName,
+          main_fabric: payload.fabrics,
+          size_range: payload.selectedSizes.join(" - "),
+          colors: payload.colors,
+        },
+
+        // مهم جدًا:
+        // لا نلمس technical_description
+        technical_description: {
+          ...(oldContent.technical_description || {}),
+        },
+      };
+
+      // 5. معرفة آخر Version
+      const { data: oldTechPack, error: versionError } = await supabase
+        .from("tech_packs")
+        .select("version")
+        .eq("model_id", activeModel.id)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (versionError) throw versionError;
+
+      const newVersion = (oldTechPack?.version || 0) + 1;
+
+      // 6. إنشاء نسخة Tech Pack جديدة
+      const { error: insertError } = await supabase
+        .from("tech_packs")
+        .insert({
+          model_id: activeModel.id,
+          content: techPackContent,
+          status: "generated",
+          version: newVersion,
+        });
+
+      if (insertError) throw insertError;
+
+      // 7. تحديث الـ UI المحلي
+      onModelChange("colors", payload.colors);
+      onModelChange("fabrics", payload.fabrics);
+      onModelChange("sizes", payload.selectedSizes);
+      onModelChange("description", JSON.stringify({
+        fabrics: payload.fabrics,
+        colors: payload.colors,
+        sizes: payload.selectedSizes,
+      }));
+      onModelChange("tech_pack_status", "created");
+      onModelChange("updated_at", new Date().toISOString());
+
+      toast.success("تم تحديث الموديل والـ Tech Pack بنجاح ✅");
+
+    } catch (error) {
+      console.error("UPDATE TECH PACK ERROR:", error);
+      toast.error("حدث خطأ أثناء تحديث الموديل والـ Tech Pack");
     } finally {
       setIsGenerating(false);
     }
@@ -276,6 +462,7 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
     handleSubmitAndGenerate,
     closeUpPreviews,
     handleCloseUpChange,
-    removeCloseUpImage
+    removeCloseUpImage,
+    handleUpdateTechPack
   };
 };
