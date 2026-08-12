@@ -4,68 +4,136 @@ import logoImage from "../assets/logo.jpeg";
 const TechPackTemplate = React.forwardRef(
   ({ data, activeModel, brandName }, ref) => {
     if (!data) return null;
+
+    // =====================================================
+    // MAIN IMAGE
+    // =====================================================
+
     const mainImage = activeModel?.image_url || "";
 
-    // 💡 دالة الأمان القصوى: بتضمن إن أي داتا راجعة من الـ AI تتعرض كنص مقروء ومستحيل تضرب الشاشة
+    // =====================================================
+    // SAFE RENDER
+    // =====================================================
+
     const safeRender = (value) => {
-      if (!value) return "---";
-      if (typeof value === "string") return value;
-      if (Array.isArray(value)) return value.join(" - ");
+      if (value === null || value === undefined || value === "") {
+        return "---";
+      }
+
+      if (typeof value === "string") {
+        return value;
+      }
+
+      if (typeof value === "number" || typeof value === "boolean") {
+        return String(value);
+      }
+
+      if (Array.isArray(value)) {
+        return value
+          .map((item) => {
+            if (typeof item === "string") {
+              return item;
+            }
+
+            if (item && typeof item === "object") {
+              return (
+                item.description ||
+                item.label ||
+                item.name ||
+                JSON.stringify(item)
+              );
+            }
+
+            return String(item);
+          })
+          .filter(Boolean)
+          .join(" - ");
+      }
+
       if (typeof value === "object") {
         try {
-          return Object.values(value)
-            .map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v)))
+          return Object.entries(value)
+            .map(([key, val]) => {
+              const rendered =
+                typeof val === "object" ? JSON.stringify(val) : String(val);
+
+              return `${key}: ${rendered}`;
+            })
             .join(" | ");
         } catch (e) {
           return JSON.stringify(value);
         }
       }
+
       return String(value);
     };
 
-    // 💡 تعديل ليدعم النصوص المباشرة بجانب المصفوفات
+    // =====================================================
+    // FABRIC NAMES
+    // =====================================================
+
     const renderFabricNames = (fabricData) => {
-      if (!fabricData) return "---";
+      if (!fabricData) {
+        return "---";
+      }
 
-      // لو الخامة جاية كنص مباشر
-      if (typeof fabricData === "string") return fabricData;
+      if (typeof fabricData === "string") {
+        return fabricData;
+      }
 
-      // لو الخامة جاية كمصفوفة
       if (Array.isArray(fabricData)) {
         return fabricData
           .map((fabric) => {
-            if (typeof fabric === "string") return fabric;
-            if (fabric && typeof fabric === "object") return fabric.name || "";
+            if (typeof fabric === "string") {
+              return fabric;
+            }
+
+            if (fabric && typeof fabric === "object") {
+              return fabric.name || "";
+            }
+
             return "";
           })
           .filter(Boolean)
           .join(" | ");
       }
+
       return "---";
     };
 
-    // 💡 تعديل ليدعم استلام الوزن بشكل صريح من الـ AI
-    const renderFabricWeights = (fabricData, weightData) => {
-      // الأولوية لوزن الخامة لو مبعوت بشكل منفصل وصريح
-      if (weightData && typeof weightData === "string") return weightData;
+    // =====================================================
+    // FABRIC WEIGHTS
+    // =====================================================
 
-      // كبديل، نحاول نستخرجه من مصفوفة الخامات القديمة لو موجودة
+    const renderFabricWeights = (fabricData, weightData) => {
+      if (typeof weightData === "string" && weightData.trim()) {
+        return weightData;
+      }
+
       if (Array.isArray(fabricData)) {
         const weights = fabricData
           .map((fabric) => {
-            if (fabric && typeof fabric === "object")
+            if (fabric && typeof fabric === "object") {
               return fabric.weight || "";
+            }
+
             return "";
           })
           .filter(Boolean);
 
-        if (weights.length > 0) return weights.join(" | ");
+        if (weights.length > 0) {
+          return weights.join(" | ");
+        }
       }
+
       return "---";
     };
 
+    // =====================================================
+    // STYLES
+    // =====================================================
+
     const styles = {
-      // إعدادات الصفحة المطاطية لضمان احتواء كامل على صفحة A4 واحدة
       page: {
         width: "210mm",
         height: "297mm",
@@ -80,12 +148,14 @@ const TechPackTemplate = React.forwardRef(
         flexDirection: "column",
         gap: "4px",
       },
+
       sectionRow: {
         display: "flex",
         gap: "4px",
         alignItems: "stretch",
         minHeight: 0,
       },
+
       navyHeader: {
         backgroundColor: "#0f172a",
         color: "#ffffff",
@@ -95,6 +165,7 @@ const TechPackTemplate = React.forwardRef(
         textAlign: "center",
         border: "1px solid #0f172a",
       },
+
       boxWrapper: {
         border: "1px solid #0f172a",
         display: "flex",
@@ -104,12 +175,14 @@ const TechPackTemplate = React.forwardRef(
         minHeight: 0,
         overflow: "hidden",
       },
+
       table: {
         width: "100%",
         height: "100%",
         borderCollapse: "collapse",
         tableLayout: "fixed",
       },
+
       th: {
         border: "1px solid #0f172a",
         padding: "2px 4px",
@@ -120,6 +193,7 @@ const TechPackTemplate = React.forwardRef(
         verticalAlign: "middle",
         overflow: "hidden",
       },
+
       td: {
         border: "1px solid #0f172a",
         padding: "2px 4px",
@@ -131,6 +205,7 @@ const TechPackTemplate = React.forwardRef(
         whiteSpace: "normal",
         wordBreak: "break-word",
       },
+
       closeUpGrid: {
         display: "grid",
         gridTemplateColumns: "repeat(4, 1fr)",
@@ -140,12 +215,15 @@ const TechPackTemplate = React.forwardRef(
         flex: 1,
         minHeight: 0,
       },
+
       closeUpItem: {
         border: "1px solid #0f172a",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
+        minHeight: 0,
       },
+
       closeUpImgBlock: {
         flex: 1,
         position: "relative",
@@ -154,7 +232,9 @@ const TechPackTemplate = React.forwardRef(
         alignItems: "center",
         backgroundColor: "#f8fafc",
         minHeight: 0,
+        overflow: "hidden",
       },
+
       redCircle: {
         position: "absolute",
         bottom: "2px",
@@ -171,48 +251,77 @@ const TechPackTemplate = React.forwardRef(
         fontWeight: "bold",
         zIndex: 2,
       },
+
       closeUpLabel: {
         fontSize: "8.5px",
         textAlign: "center",
         fontWeight: "bold",
         borderTop: "1px solid #0f172a",
         padding: "2px",
-        whiteSpace: "nowrap",
+        whiteSpace: "normal",
         overflow: "hidden",
         backgroundColor: "#ffffff",
+        minHeight: "17px",
       },
     };
+
+    // =====================================================
+    // BOM
+    // =====================================================
+
+    const bomData = data?.bill_of_materials_BOM || {};
 
     const bomList = [
       {
         name: "القماش الرئيسي",
-        desc: safeRender(data?.bill_of_materials_BOM?.main_fabric),
+        desc: safeRender(bomData.main_fabric),
       },
-      { name: "الريب", desc: safeRender(data?.bill_of_materials_BOM?.rib) },
+
+      {
+        name: "الريب",
+        desc: safeRender(bomData.rib),
+      },
+
       {
         name: "السحاب",
-        desc: safeRender(data?.bill_of_materials_BOM?.zippers_and_buttons),
+        desc: safeRender(bomData.zippers),
       },
-      { name: "الأزرار", desc: "(يحدد لاحقاً)" },
+
+      {
+        name: "الأزرار",
+        desc: safeRender(bomData.buttons),
+      },
+
       {
         name: "الخيوط",
-        desc: safeRender(data?.bill_of_materials_BOM?.threads),
+        desc: safeRender(bomData.threads),
       },
+
       {
         name: "الطباعة",
-        desc: safeRender(data?.bill_of_materials_BOM?.printing_embroidery),
+        desc: safeRender(bomData.printing),
       },
-      { name: "التطريز", desc: "(يحدد لاحقاً)" },
+
+      {
+        name: "التطريز",
+        desc: safeRender(bomData.embroidery),
+      },
+
       {
         name: "الإكسسوارات",
-        desc: safeRender(data?.bill_of_materials_BOM?.accessories),
+        desc: safeRender(bomData.accessories),
       },
     ];
+
+    // =====================================================
+    // SIZES
+    // =====================================================
 
     const sizesString =
       typeof data?.basic_info?.size_range === "string"
         ? data.basic_info.size_range
         : "";
+
     const displaySizes = sizesString
       ? sizesString
           .split(/[،,-]+/)
@@ -220,33 +329,111 @@ const TechPackTemplate = React.forwardRef(
           .filter(Boolean)
       : ["يحدد لاحقاً"];
 
+    // =====================================================
+    // COLORS
+    // =====================================================
+
     const colorsArray = Array.isArray(data?.basic_info?.colors)
       ? data.basic_info.colors
-      : activeModel?.colors || ["يحدد لاحقاً"];
+      : Array.isArray(activeModel?.colors)
+        ? activeModel.colors
+        : [];
 
-    const dynamicCloseUpParts = Array.isArray(
+    // =====================================================
+    // CLOSE-UP IMAGES
+    // =====================================================
+
+    const closeUpImages = Array.isArray(activeModel?.close_up_images)
+      ? activeModel.close_up_images
+      : [];
+
+    // =====================================================
+    // CLOSE-UP DESCRIPTIONS
+    // =====================================================
+
+    const closeUpParts = Array.isArray(
       data?.technical_description?.close_up_parts,
     )
       ? data.technical_description.close_up_parts
       : [];
 
-    const closeUpSlots = Array.from({ length: 8 }).map((_, idx) => {
-      return dynamicCloseUpParts[idx] || null;
-    });
+    // =====================================================
+    // CREATE CLOSE-UP SLOTS
+    //
+    // IMPORTANT:
+    // Images are the primary source.
+    // Descriptions are secondary.
+    // =====================================================
+
+    const closeUpSlots = Array.from(
+      {
+        length: Math.max(closeUpImages.length, 8),
+      },
+      (_, idx) => {
+        const image = closeUpImages[idx] || null;
+
+        const rawLabel = closeUpParts[idx];
+
+        let label = "تفصيل غير موضح";
+
+        if (typeof rawLabel === "string" && rawLabel.trim()) {
+          label = rawLabel.trim();
+        } else if (rawLabel && typeof rawLabel === "object") {
+          label = rawLabel.description || rawLabel.label || "تفصيل غير موضح";
+        }
+
+        return {
+          image,
+          label,
+        };
+      },
+    );
+
+    // =====================================================
+    // CARE INSTRUCTIONS
+    // =====================================================
+
+    const careInstructions = Array.isArray(data?.care_instructions)
+      ? data.care_instructions
+      : [];
+
+    // =====================================================
+    // QUALITY CHECK
+    // =====================================================
+
+    const qualityPoints = Array.isArray(data?.quality_check_points)
+      ? data.quality_check_points
+      : [];
+
+    // =====================================================
+    // RENDER
+    // =====================================================
 
     return (
       <>
         <style>
           {`
-            @page { size: A4 portrait; margin: 0mm !important; }
+            @page {
+              size: A4 portrait;
+              margin: 0mm !important;
+            }
+
             @media print {
-              body { margin: 0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+              body {
+                margin: 0 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
             }
           `}
         </style>
 
         <div ref={ref} style={styles.page}>
-          {/* 1. HEADER SECTION */}
+          {/* ================================================= */}
+          {/* HEADER */}
+          {/* ================================================= */}
+
           <div
             style={{
               display: "flex",
@@ -298,6 +485,7 @@ const TechPackTemplate = React.forwardRef(
               >
                 الورقة الفنية للمنتج
               </h1>
+
               <h2
                 style={{
                   color: "#dc2626",
@@ -308,7 +496,14 @@ const TechPackTemplate = React.forwardRef(
               >
                 قسم التخطيط والجودة
               </h2>
-              <h3 style={{ fontSize: "12px", fontWeight: "bold", margin: 0 }}>
+
+              <h3
+                style={{
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  margin: 0,
+                }}
+              >
                 شركة الصحابة لتصنيع وتصدير الملابس
               </h3>
             </div>
@@ -324,33 +519,63 @@ const TechPackTemplate = React.forwardRef(
             >
               <tbody>
                 <tr>
-                  <th style={{ ...styles.th, width: "40%" }}>رقم الملف:</th>
+                  <th
+                    style={{
+                      ...styles.th,
+                      width: "40%",
+                    }}
+                  >
+                    رقم الملف:
+                  </th>
+
                   <td style={styles.td}>
                     {activeModel?.model_number || "TECH-0000"}
                   </td>
                 </tr>
+
                 <tr>
                   <th style={styles.th}>تاريخ الإصدار:</th>
+
                   <td style={styles.td}>
                     {new Date().toLocaleDateString("ar-EG")}
                   </td>
                 </tr>
+
                 <tr>
                   <th style={styles.th}>الإصدار:</th>
+
                   <td style={styles.td}>1.0</td>
                 </tr>
+
                 <tr>
                   <th style={styles.th}>عدد الصفحات:</th>
+
                   <td style={styles.td}>1 من 1</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
-          {/* 2. ROW 1: Images & Model Info */}
-          <div style={{ ...styles.sectionRow, flex: 3.2 }}>
-            <div style={{ ...styles.boxWrapper, flex: "2.5" }}>
+          {/* ================================================= */}
+          {/* MODEL INFO + MAIN IMAGE */}
+          {/* ================================================= */}
+
+          <div
+            style={{
+              ...styles.sectionRow,
+              flex: 3.2,
+            }}
+          >
+            {/* MAIN IMAGE */}
+
+            <div
+              style={{
+                ...styles.boxWrapper,
+                flex: "2.5",
+              }}
+            >
               <div style={styles.navyHeader}>FRONT | BACK | SIDE</div>
+
               <div
                 style={{
                   flex: 1,
@@ -372,65 +597,93 @@ const TechPackTemplate = React.forwardRef(
                     }}
                   />
                 ) : (
-                  <span style={{ color: "#94a3b8" }}>صورة الموديل المجمعة</span>
+                  <span
+                    style={{
+                      color: "#94a3b8",
+                    }}
+                  >
+                    صورة الموديل المجمعة
+                  </span>
                 )}
               </div>
             </div>
 
-            <div style={{ ...styles.boxWrapper, flex: "1" }}>
+            {/* MODEL DATA */}
+
+            <div
+              style={{
+                ...styles.boxWrapper,
+                flex: "1",
+              }}
+            >
               <div style={styles.navyHeader}>1- بيانات الموديل</div>
+
               <table style={styles.table}>
                 <tbody>
                   <tr>
                     <th style={styles.th}>اسم المنتج</th>
+
                     <td style={styles.td}>
                       {safeRender(data?.basic_info?.product_name)}
                     </td>
                   </tr>
+
                   <tr>
                     <th style={styles.th}>رقم الموديل</th>
+
                     <td style={styles.td}>
                       {activeModel?.model_number || "-"}
                     </td>
                   </tr>
+
                   <tr>
                     <th style={styles.th}>اسم البراند</th>
+
                     <td style={styles.td}>
                       {safeRender(data?.basic_info?.brand) ||
                         brandName ||
                         "---"}
                     </td>
                   </tr>
+
                   <tr>
                     <th style={styles.th}>الفئة</th>
+
                     <td style={styles.td}>
                       {safeRender(data?.basic_info?.category)}
                     </td>
                   </tr>
+
                   <tr>
                     <th style={styles.th}>الموسم</th>
+
                     <td style={styles.td}>
                       {safeRender(data?.basic_info?.season)}
                     </td>
                   </tr>
+
                   <tr>
                     <th style={styles.th}>نوع الخامة</th>
+
                     <td style={styles.td}>
                       {renderFabricNames(data?.basic_info?.main_fabric)}
                     </td>
                   </tr>
+
                   <tr>
                     <th style={styles.th}>وزن الخامة</th>
+
                     <td style={styles.td}>
-                      {/* 💡 تم تمرير نوع الخامة ووزن الخامة معاً لضمان الاستخراج الصحيح */}
                       {renderFabricWeights(
                         data?.basic_info?.main_fabric,
                         data?.basic_info?.fabric_weight,
                       )}
                     </td>
                   </tr>
+
                   <tr>
                     <th style={styles.th}>المقاسات</th>
+
                     <td style={styles.td}>{sizesString || "---"}</td>
                   </tr>
                 </tbody>
@@ -438,44 +691,70 @@ const TechPackTemplate = React.forwardRef(
             </div>
           </div>
 
-          {/* 3. ROW 2: Manufacturing & Technical Description */}
-          <div style={{ ...styles.sectionRow }}>
+          {/* ================================================= */}
+          {/* MANUFACTURING + TECHNICAL DESCRIPTION */}
+          {/* ================================================= */}
+
+          <div
+            style={{
+              ...styles.sectionRow,
+            }}
+          >
             <div style={styles.boxWrapper}>
               <div style={styles.navyHeader}>2- تفاصيل التصنيع</div>
+
               <table style={styles.table}>
                 <tbody>
                   <tr>
-                    <th style={{ ...styles.th, width: "30%" }}>نوع الخياطة</th>
+                    <th
+                      style={{
+                        ...styles.th,
+                        width: "30%",
+                      }}
+                    >
+                      نوع الخياطة
+                    </th>
+
                     <td style={styles.td}>
                       {safeRender(data?.technical_description?.stitching_type)}
                     </td>
                   </tr>
+
                   <tr>
                     <th style={styles.th}>نوع الغرز</th>
+
                     <td style={styles.td}>
                       {safeRender(data?.technical_description?.stitch_details)}
                     </td>
                   </tr>
+
                   <tr>
                     <th style={styles.th}>أماكن التقويات</th>
+
                     <td style={styles.td}>
                       {safeRender(
                         data?.technical_description?.reinforcement_areas,
                       )}
                     </td>
                   </tr>
+
                   <tr>
                     <th style={styles.th}>التشطيب</th>
+
                     <td style={styles.td}>
                       {safeRender(data?.technical_description?.finishing)}
                     </td>
                   </tr>
+
                   <tr>
                     <th style={styles.th}>طريقة التشغيل</th>
-                    <td style={styles.td}>(يحدد لاحقاً)</td>
+
+                    <td style={styles.td}>يحدد لاحقاً</td>
                   </tr>
+
                   <tr>
                     <th style={styles.th}>ملاحظات الإنتاج</th>
+
                     <td style={styles.td}>
                       {safeRender(
                         data?.technical_description?.production_notes,
@@ -488,6 +767,7 @@ const TechPackTemplate = React.forwardRef(
 
             <div style={styles.boxWrapper}>
               <div style={styles.navyHeader}>1- الوصف الفني</div>
+
               <div
                 style={{
                   padding: "6px",
@@ -503,83 +783,114 @@ const TechPackTemplate = React.forwardRef(
             </div>
           </div>
 
-          {/* 4. ROW 3: Close-up Details & BOM */}
-          <div style={{ ...styles.sectionRow, flex: 2.2 }}>
-            <div style={{ ...styles.boxWrapper, flex: "1.5" }}>
+          {/* ================================================= */}
+          {/* CLOSE-UP + BOM */}
+          {/* ================================================= */}
+
+          <div
+            style={{
+              ...styles.sectionRow,
+              flex: 2.2,
+            }}
+          >
+            {/* CLOSE-UP */}
+
+            <div
+              style={{
+                ...styles.boxWrapper,
+                flex: "1.5",
+              }}
+            >
               <div style={styles.navyHeader}>
                 تفاصيل المنتج (CLOSE-UP DETAILS)
               </div>
+
               <div style={styles.closeUpGrid}>
-                {closeUpSlots.map((label, idx) => {
-                  const imgSrc = activeModel?.close_up_images?.[idx];
-                  return (
-                    <div key={idx} style={styles.closeUpItem}>
-                      <div style={styles.closeUpImgBlock}>
-                        <div style={styles.redCircle}>{idx + 1}</div>
-                        {imgSrc ? (
-                          <img
-                            src={imgSrc}
-                            alt={safeRender(label) || `Detail ${idx + 1}`}
-                            style={{
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                          />
-                        ) : (
-                          <span style={{ color: "#cbd5e1", fontSize: "9px" }}>
-                            -
-                          </span>
-                        )}
-                      </div>
-                      {/* 💡 يعرض الوصف فقط لو الصورة موجودة */}
-                      <div style={styles.closeUpLabel}>
-                        {imgSrc ? safeRender(label) : "---"}
-                      </div>
+                {closeUpSlots.map((item, idx) => (
+                  <div key={idx} style={styles.closeUpItem}>
+                    <div style={styles.closeUpImgBlock}>
+                      <div style={styles.redCircle}>{idx + 1}</div>
+
+                      {item.image ? (
+                        <img
+                          src={item.image}
+                          alt={item.label}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
+                        />
+                      ) : (
+                        <span
+                          style={{
+                            color: "#cbd5e1",
+                            fontSize: "9px",
+                          }}
+                        >
+                          -
+                        </span>
+                      )}
                     </div>
-                  );
-                })}
+
+                    <div style={styles.closeUpLabel}>
+                      {item.image ? safeRender(item.label) : "---"}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div style={{ ...styles.boxWrapper, flex: "1" }}>
-              <div style={{ ...styles.navyHeader, backgroundColor: "#b91c1c" }}>
+            {/* BOM */}
+
+            <div
+              style={{
+                ...styles.boxWrapper,
+                flex: "1",
+              }}
+            >
+              <div
+                style={{
+                  ...styles.navyHeader,
+                  backgroundColor: "#b91c1c",
+                }}
+              >
                 جدول الخامات (BOM)
               </div>
+
               <table style={styles.table}>
                 <thead>
                   <tr>
                     <th
                       style={{
                         ...styles.th,
-                        backgroundColor: "#f1f5f9",
                         width: "10%",
                       }}
                     >
                       م
                     </th>
+
                     <th
                       style={{
                         ...styles.th,
-                        backgroundColor: "#f1f5f9",
                         width: "25%",
                       }}
                     >
                       الخامة
                     </th>
+
                     <th
                       style={{
                         ...styles.th,
-                        backgroundColor: "#f1f5f9",
                         width: "40%",
                       }}
                     >
                       النوع / الوصف
                     </th>
+
                     <th
                       style={{
                         ...styles.th,
-                        backgroundColor: "#f1f5f9",
                         width: "25%",
                       }}
                     >
@@ -587,16 +898,30 @@ const TechPackTemplate = React.forwardRef(
                     </th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {bomList.map((item, idx) => (
                     <tr key={idx}>
-                      <td style={{ ...styles.td, textAlign: "center" }}>
+                      <td
+                        style={{
+                          ...styles.td,
+                          textAlign: "center",
+                        }}
+                      >
                         {idx + 1}
                       </td>
+
                       <td style={styles.td}>{item.name}</td>
+
                       <td style={styles.td}>{item.desc}</td>
-                      <td style={{ ...styles.td, color: "#64748b" }}>
-                        (يحدد لاحقاً)
+
+                      <td
+                        style={{
+                          ...styles.td,
+                          color: "#64748b",
+                        }}
+                      >
+                        يحدد لاحقاً
                       </td>
                     </tr>
                   ))}
@@ -605,10 +930,21 @@ const TechPackTemplate = React.forwardRef(
             </div>
           </div>
 
-          {/* 5. ROW 4: POM, Size Range, Colors */}
-          <div style={{ ...styles.sectionRow, flex: 0.9 }}>
+          {/* ================================================= */}
+          {/* POM + SIZES + COLORS */}
+          {/* ================================================= */}
+
+          <div
+            style={{
+              ...styles.sectionRow,
+              flex: 0.9,
+            }}
+          >
+            {/* POM */}
+
             <div style={styles.boxWrapper}>
               <div style={styles.navyHeader}>جدول القياسات (POM)</div>
+
               <div
                 style={{
                   padding: "4px",
@@ -621,11 +957,15 @@ const TechPackTemplate = React.forwardRef(
                   flex: 1,
                 }}
               >
-                (يحدد لاحقاً بواسطة قسم التخطيط)
+                يحدد لاحقاً بواسطة قسم التخطيط
               </div>
             </div>
+
+            {/* SIZES */}
+
             <div style={styles.boxWrapper}>
               <div style={styles.navyHeader}>جدول المقاسات (SIZE RANGE)</div>
+
               <div
                 style={{
                   display: "flex",
@@ -652,8 +992,12 @@ const TechPackTemplate = React.forwardRef(
                 ))}
               </div>
             </div>
+
+            {/* COLORS */}
+
             <div style={styles.boxWrapper}>
               <div style={styles.navyHeader}>لوحة الألوان (COLOR PALETTE)</div>
+
               <div
                 style={{
                   display: "flex",
@@ -662,36 +1006,67 @@ const TechPackTemplate = React.forwardRef(
                   gap: "8px",
                   padding: "4px",
                   flex: 1,
+                  flexWrap: "wrap",
                 }}
               >
-                {colorsArray.map((color, idx) => (
-                  <div key={idx} style={{ textAlign: "center" }}>
+                {colorsArray.map((color, idx) => {
+                  const colorName =
+                    typeof color === "string"
+                      ? color
+                      : color?.color || "يحدد لاحقاً";
+
+                  const partName =
+                    typeof color === "string" ? "" : color?.part || "";
+
+                  return (
                     <div
+                      key={idx}
                       style={{
-                        width: "22px",
-                        height: "10px",
-                        backgroundColor: "#f1f5f9",
-                        border: "1px solid #0f172a",
-                        margin: "0 auto 2px",
+                        textAlign: "center",
                       }}
-                    ></div>
-                    <div style={{ fontSize: "8.5px", fontWeight: "bold" }}>
-                      {typeof color === "string"
-                        ? color
-                        : `${color?.part || "جزء"}: ${color?.color || "يحدد لاحقاً"}`}{" "}
+                    >
+                      <div
+                        style={{
+                          width: "22px",
+                          height: "10px",
+                          backgroundColor: "#f1f5f9",
+                          border: "1px solid #0f172a",
+                          margin: "0 auto 2px",
+                        }}
+                      />
+
+                      <div
+                        style={{
+                          fontSize: "8.5px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {partName ? `${partName}: ${colorName}` : colorName}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
 
-          {/* 6. ROW 5: Tech Comments, Care, Quality */}
-          <div style={{ ...styles.sectionRow, flex: 1.1 }}>
+          {/* ================================================= */}
+          {/* COMMENTS + CARE + QUALITY */}
+          {/* ================================================= */}
+
+          <div
+            style={{
+              ...styles.sectionRow,
+              flex: 1.1,
+            }}
+          >
+            {/* TECHNICAL COMMENTS */}
+
             <div style={styles.boxWrapper}>
               <div style={styles.navyHeader}>
                 ملاحظات فنية (TECHNICAL COMMENTS)
               </div>
+
               <div
                 style={{
                   padding: "4px",
@@ -699,36 +1074,85 @@ const TechPackTemplate = React.forwardRef(
                   fontWeight: "bold",
                   fontSize: "9.5px",
                   flex: 1,
+                  overflow: "hidden",
                 }}
               >
                 {safeRender(data?.technical_comments)}
               </div>
             </div>
+
+            {/* CARE */}
+
             <div style={styles.boxWrapper}>
               <div style={styles.navyHeader}>
                 تعليمات العناية (CARE INSTRUCTIONS)
               </div>
+
               <div
                 style={{
                   padding: "4px",
-                  textAlign: "center",
-                  fontWeight: "bold",
-                  color: "#64748b",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
                   flex: 1,
-                  fontSize: "9.5px",
+                  overflow: "hidden",
+                  fontSize: "9px",
+                  fontWeight: "bold",
+                  textAlign: "right",
                 }}
               >
-                أيقونات العناية
+                {careInstructions.length > 0 ? (
+                  <ul
+                    style={{
+                      listStyle: "none",
+                      padding: 0,
+                      margin: 0,
+                    }}
+                  >
+                    {careInstructions.slice(0, 4).map((instruction, i) => (
+                      <li
+                        key={i}
+                        style={{
+                          marginBottom: "2px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            color: "#dc2626",
+                            marginLeft: "4px",
+                          }}
+                        >
+                          ✓
+                        </span>
+
+                        {safeRender(instruction)}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div
+                    style={{
+                      color: "#64748b",
+                      textAlign: "center",
+                    }}
+                  >
+                    لم يتم تحديد تعليمات العناية
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* QUALITY */}
+
             <div style={styles.boxWrapper}>
               <div style={styles.navyHeader}>
                 نقاط فحص الجودة (QUALITY CHECK POINTS)
               </div>
-              <div style={{ padding: "4px", flex: 1, overflow: "hidden" }}>
+
+              <div
+                style={{
+                  padding: "4px",
+                  flex: 1,
+                  overflow: "hidden",
+                }}
+              >
                 <ul
                   style={{
                     listStyle: "none",
@@ -739,21 +1163,37 @@ const TechPackTemplate = React.forwardRef(
                     textAlign: "right",
                   }}
                 >
-                  {Array.isArray(data?.quality_check_points) ? (
-                    data.quality_check_points.slice(0, 3).map((pt, i) => (
-                      <li key={i} style={{ marginBottom: "2px" }}>
-                        <span style={{ color: "#dc2626", marginLeft: "4px" }}>
+                  {qualityPoints.length > 0 ? (
+                    qualityPoints.slice(0, 3).map((pt, i) => (
+                      <li
+                        key={i}
+                        style={{
+                          marginBottom: "2px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            color: "#dc2626",
+                            marginLeft: "4px",
+                          }}
+                        >
                           ✔
                         </span>
+
                         {safeRender(pt)}
                       </li>
                     ))
                   ) : (
-                    <li style={{ marginBottom: "2px" }}>
-                      <span style={{ color: "#dc2626", marginLeft: "4px" }}>
+                    <li>
+                      <span
+                        style={{
+                          color: "#dc2626",
+                          marginLeft: "4px",
+                        }}
+                      >
                         ✔
                       </span>
-                      {safeRender(data?.quality_check_points)}
+                      لم يتم تحديد نقاط الفحص
                     </li>
                   )}
                 </ul>
@@ -761,7 +1201,10 @@ const TechPackTemplate = React.forwardRef(
             </div>
           </div>
 
-          {/* 7. FOOTER */}
+          {/* ================================================= */}
+          {/* FOOTER APPROVALS */}
+          {/* ================================================= */}
+
           <div
             style={{
               display: "flex",
@@ -800,18 +1243,40 @@ const TechPackTemplate = React.forwardRef(
                 >
                   {title}
                 </div>
-                <div style={{ fontSize: "8.5px", fontWeight: "bold" }}>
+
+                <div
+                  style={{
+                    fontSize: "8.5px",
+                    fontWeight: "bold",
+                  }}
+                >
                   الاسم: ....................
                 </div>
-                <div style={{ fontSize: "8.5px", fontWeight: "bold" }}>
+
+                <div
+                  style={{
+                    fontSize: "8.5px",
+                    fontWeight: "bold",
+                  }}
+                >
                   التاريخ: ..................
                 </div>
-                <div style={{ fontSize: "8.5px", fontWeight: "bold" }}>
+
+                <div
+                  style={{
+                    fontSize: "8.5px",
+                    fontWeight: "bold",
+                  }}
+                >
                   التوقيع: ..................
                 </div>
               </div>
             ))}
           </div>
+
+          {/* ================================================= */}
+          {/* FOOTER */}
+          {/* ================================================= */}
 
           <div
             style={{

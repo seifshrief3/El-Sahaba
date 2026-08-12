@@ -523,18 +523,14 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
 
   const handleSubmitAndGenerate = async () => {
     if (!modelName?.trim()) {
-      toast.error(
-        "برجاء إدخال اسم الموديل أولاً"
-      );
+      toast.error("برجاء إدخال اسم الموديل أولاً");
       return;
     }
 
     setIsGenerating(true);
 
     try {
-      toast.info(
-        "جاري تجهيز الصور..."
-      );
+      toast.info("جاري تجهيز الصور...");
 
       const {
         finalImageUrl,
@@ -542,26 +538,35 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
       } = await uploadCurrentImages();
 
       const payload = {
-        name: modelName,
-        notes,
-        image_url: finalImageUrl,
-        close_up_images: finalCloseUpUrls,
+        name: modelName.trim(),
+        notes: notes || "",
 
-        fabrics: fabrics.filter(
-          (f) => f.name?.trim()
-        ),
+        image_url: finalImageUrl || "",
 
-        colors: colors.filter(
-          (item) =>
-            item.part?.trim() ||
-            item.color?.trim()
-        ),
+        close_up_images: Array.isArray(finalCloseUpUrls)
+          ? finalCloseUpUrls.filter(Boolean)
+          : [],
 
-        selectedSizes,
+        fabrics: Array.isArray(fabrics)
+          ? fabrics.filter((f) => f?.name?.trim())
+          : [],
 
-        brand_name: brandName,
+        colors: Array.isArray(colors)
+          ? colors.filter(
+            (item) =>
+              item?.part?.trim() ||
+              item?.color?.trim()
+          )
+          : [],
+
+        selectedSizes: Array.isArray(selectedSizes)
+          ? selectedSizes.filter(Boolean)
+          : [],
+
+        brand_name: brandName || "",
+
         collection_id:
-          activeModel.collection_id,
+          activeModel?.collection_id,
       };
 
       toast.info(
@@ -580,7 +585,7 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
       );
 
       // ==========================================
-      // Update local state
+      // UPDATE LOCAL STATE
       // ==========================================
 
       onModelChange(
@@ -595,17 +600,17 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
 
       onModelChange(
         "close_up_images",
-        finalCloseUpUrls
+        payload.close_up_images
       );
 
       onModelChange(
         "name",
-        modelName
+        payload.name
       );
 
       onModelChange(
         "customer_notes",
-        notes
+        payload.notes
       );
 
       onModelChange(
@@ -638,13 +643,19 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
       );
 
       // ==========================================
-      // Reset uploaded files
+      // RESET UPLOADED FILES
       // ==========================================
 
       setImageFile(null);
       setCloseUpFiles([]);
-      setImagePreview(finalImageUrl);
-      setCloseUpPreviews(finalCloseUpUrls);
+
+      setImagePreview(
+        finalImageUrl || ""
+      );
+
+      setCloseUpPreviews(
+        payload.close_up_images
+      );
 
       toast.success(
         "تم الحفظ وإرسال الطلب بنجاح! 🎉"
@@ -662,7 +673,6 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
       setIsGenerating(false);
     }
   };
-
   // ==========================================
   // 12. UPDATE TECH PACK
   // ==========================================
