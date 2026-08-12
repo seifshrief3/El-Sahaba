@@ -1,72 +1,90 @@
 import React, { useState, useEffect } from "react";
-import { Search, CheckCircle2, PackageSearch } from "lucide-react";
+import { Search, CheckCircle2, Package } from "lucide-react";
 import { supabase } from "../../../supabase";
 
 const ReceivingFromPlanning = () => {
-  const [receivedOrders, setReceivedOrders] = useState([]);
+  const [receivedDeliveries, setReceivedDeliveries] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // 1. جلب الأوردرات اللي تم استلامها بالفعل (أرشيف)
+  // 1. جلب الدفعات اللي تم استلامها بالفعل (أرشيف الدفعات المكتملة)
   useEffect(() => {
-    const fetchReceivedOrders = async () => {
+    const fetchReceivedDeliveries = async () => {
       setIsLoading(true);
       try {
         const { data, error } = await supabase
-          .from("production_orders")
+          .from("production_deliveries")
           .select(
             `
             id,
-            order_number,
-            collection_id,
-            cartons_count,
+            delivery_number,
+            status,
+            updated_at,
             created_at,
-            collections (
-              name,
-              brands (name_ar)
+            production_orders (
+              order_number,
+              collections (
+                name,
+                brands (name_ar)
+              )
             ),
-            production_order_items (
-              total_quantity
+            production_delivery_items (
+              delivered_qty
             )
           `,
           )
-          .eq("status", "completed") // 💡 فلترة الأوردرات المكتملة (تم استلامها)
-          .order("id", { ascending: false }); // ترتيب من الأحدث للأقدم
+          .eq("status", "completed") // 💡 فلترة الدفعات المكتملة (تم استلامها في المخزن)
+          .order("updated_at", { ascending: false }); // ترتيب من الأحدث للأقدم
 
         if (error) throw error;
 
         // تنسيق الداتا للعرض
-        const formattedData = data.map((order) => ({
-          db_id: order.id,
-          collection_id: order.collection_id,
-          orderNumber: order.order_number || order.id.substring(0, 8),
-          collectionName: order.collections?.name || "غير محدد",
-          brand: order.collections?.brands?.name_ar || "غير محدد",
-          cartonsCount: order.cartons_count || 0,
-          totalQuantity:
-            order.production_order_items?.reduce(
-              (sum, item) => sum + item.total_quantity,
+        const formattedData = data.map((delivery) => {
+          const totalQty =
+            delivery.production_delivery_items?.reduce(
+              (sum, item) => sum + (item.delivered_qty || 0),
               0,
-            ) || 0,
-          // تحديد تاريخ تقريبي للاستلام
-          receivedDate: new Date(order.created_at).toLocaleDateString("ar-EG"),
-        }));
+            ) || 0;
 
-        setReceivedOrders(formattedData);
+          return {
+            db_id: delivery.id,
+            deliveryNumber: delivery.delivery_number || "غير محدد",
+            orderNumber: delivery.production_orders?.order_number || "غير محدد",
+            collectionName:
+              delivery.production_orders?.collections?.name || "غير محدد",
+            brand:
+              delivery.production_orders?.collections?.brands?.name_ar ||
+              "غير محدد",
+            totalQuantity: totalQty,
+            // تحديد تاريخ الاستلام الفعلي بناءً على آخر تحديث لحالة الدفعة
+            receivedDate: new Date(
+              delivery.updated_at || delivery.created_at,
+            ).toLocaleDateString("ar-EG", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          };
+        });
+
+        setReceivedDeliveries(formattedData);
       } catch (error) {
-        console.error("Error fetching received orders:", error);
+        console.error("Error fetching received deliveries:", error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchReceivedOrders();
+    fetchReceivedDeliveries();
   }, []);
 
-  const filteredOrders = receivedOrders.filter(
-    (order) =>
-      order.collectionName.includes(searchTerm) ||
-      order.brand.includes(searchTerm),
+  const filteredDeliveries = receivedDeliveries.filter(
+    (delivery) =>
+      delivery.collectionName.includes(searchTerm) ||
+      delivery.brand.includes(searchTerm) ||
+      delivery.deliveryNumber.includes(searchTerm),
   );
 
   return (
@@ -82,8 +100,9 @@ const ReceivingFromPlanning = () => {
           </h1>
         </div>
         <p className="mt-2 text-sm text-slate-500 mr-12">
-          هنا يتم عرض كافة الكولكشنات التي قمت باستلامها بنجاح وتم إدراج كمياتها
-          في أرصدة الجرد الخاصة بالمخزن.
+          هنا يتم عرض كافة <strong className="text-emerald-700">الدفعات</strong>{" "}
+          التي قمت باستلامها بنجاح وتم إدراج كمياتها في أرصدة الجرد الخاصة
+          بالمخزن.
         </p>
       </section>
 
@@ -96,7 +115,7 @@ const ReceivingFromPlanning = () => {
           />
           <input
             type="text"
-            placeholder="بحث باسم الكولكشن أو البراند..."
+            placeholder="بحث باسم الكولكشن، البراند، أو رقم الدفعة..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pr-11 pl-4 text-sm outline-none focus:border-[#1a365d]"
@@ -110,59 +129,59 @@ const ReceivingFromPlanning = () => {
           <div className="text-center py-10 font-bold text-[#1a365d]">
             جاري تحميل السجل...
           </div>
-        ) : filteredOrders.length === 0 ? (
+        ) : filteredDeliveries.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-[2rem] border border-slate-200">
             <p className="text-slate-500 font-bold">
-              لا توجد كولكشنات مستلمة حتى الآن.
+              لا توجد دفعات مستلمة حتى الآن.
             </p>
           </div>
         ) : (
-          filteredOrders.map((order) => (
+          filteredDeliveries.map((delivery) => (
             <div
-              key={order.db_id}
+              key={delivery.db_id}
               className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm border-r-4 border-r-emerald-500 hover:shadow-md transition-shadow"
             >
               <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="space-y-4">
                   <div>
-                    <h2 className="text-2xl font-bold text-[#1a365d]">
-                      {order.brand}
-                    </h2>
-                    <p className="mt-1 text-sm font-medium text-slate-500">
-                      {order.collectionName}
+                    <div className="flex items-center gap-2 mb-1">
+                      <h2 className="text-2xl font-bold text-[#1a365d]">
+                        {delivery.brand}
+                      </h2>
+                      <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono text-xs font-bold border border-slate-200 flex items-center gap-1">
+                        <Package size={12} />
+                        دفعة {delivery.deliveryNumber}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium text-slate-500">
+                      {delivery.collectionName}
                     </p>
                   </div>
 
-                  <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2 xl:grid-cols-3">
                     <p>
                       <span className="font-bold text-slate-800">
-                        رقم الأوردر:
+                        رقم الأمر الأساسي:
                       </span>{" "}
                       <span className="bg-slate-100 px-2 py-0.5 rounded font-mono text-xs">
-                        {order.orderNumber}
+                        {delivery.orderNumber}
                       </span>
                     </p>
                     <p>
                       <span className="font-bold text-slate-800">
-                        إجمالي القطع المستلمة:
+                        إجمالي القطع في الدفعة:
                       </span>{" "}
-                      <span className="text-[#1a365d] font-black">
-                        {order.totalQuantity}
+                      <span className="text-[#1a365d] font-black text-lg">
+                        {delivery.totalQuantity}
                       </span>{" "}
                       قطعة
                     </p>
                     <p>
                       <span className="font-bold text-slate-800">
-                        الكراتين المستلمة:
+                        تاريخ الاستلام:
                       </span>{" "}
-                      {order.cartonsCount} كرتونة
-                    </p>
-                    <p>
-                      <span className="font-bold text-slate-800">
-                        تاريخ الأوردر:
-                      </span>{" "}
-                      <span className="text-slate-500">
-                        {order.receivedDate}
+                      <span className="text-emerald-700 font-bold">
+                        {delivery.receivedDate}
                       </span>
                     </p>
                   </div>

@@ -1,60 +1,117 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { handleUpdateModelAndGenerateTechPack, handleUpdateModelRelations } from "../services/modelService";
+import {
+  handleUpdateModelAndGenerateTechPack,
+  handleUpdateModelRelations,
+} from "../services/modelService";
 import { supabase } from "../../supabase";
 
 export const useModelForm = (activeModel, onModelChange, brandName) => {
   // ==========================================
-  // 1. States للبيانات الأساسية والصورة
+  // 1. States
   // ==========================================
+
   const [modelName, setModelName] = useState(activeModel?.name || "");
   const [notes, setNotes] = useState(activeModel?.customer_notes || "");
 
+  // Main image
   const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(activeModel?.image_url || null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
-  // States لصور التفاصيل
-  const [closeUpFiles, setCloseUpFiles] = useState([]);
-  const [closeUpPreviews, setCloseUpPreviews] = useState(activeModel?.close_up_images || []);
+  const [imagePreview, setImagePreview] = useState(
+    activeModel?.image_url || null
+  );
 
-  // States للبيانات الفرعية
-  const [fabrics, setFabrics] = useState([{ name: "", weight: "" }]);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  // Close-up images
+  const [closeUpFiles, setCloseUpFiles] = useState([]);
+  const [closeUpPreviews, setCloseUpPreviews] = useState(
+    activeModel?.close_up_images || []
+  );
+
+  // ==========================================
+  // 2. Form data
+  // ==========================================
+
+  const [fabrics, setFabrics] = useState([
+    {
+      name: "",
+      weight: "",
+    },
+  ]);
+
   const [colors, setColors] = useState([
     {
       variant: 1,
       part: "",
-      color: ""
-    }
-  ]); const [selectedSizes, setSelectedSizes] = useState([]);
+      color: "",
+    },
+  ]);
+
+  const [selectedSizes, setSelectedSizes] = useState([]);
 
   const sizesList = [
-    "6 شهور", "9 شهور", "12 شهور", "18 شهور", "24 شهور", "2 سنوات",
-    "3 سنوات", "4 سنوات", "5 سنوات", "6 سنوات", "7 سنوات", "8 سنوات",
-    "10 سنوات", "12 سنة", "14 سنة", "16 سنة", "18 سنة", "20 سنة",
-    "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL",
+    "6 شهور",
+    "9 شهور",
+    "12 شهور",
+    "18 شهور",
+    "24 شهور",
+    "2 سنوات",
+    "3 سنوات",
+    "4 سنوات",
+    "5 سنوات",
+    "6 سنوات",
+    "7 سنوات",
+    "8 سنوات",
+    "10 سنوات",
+    "12 سنة",
+    "14 سنة",
+    "16 سنة",
+    "18 سنة",
+    "20 سنة",
+    "XS",
+    "S",
+    "M",
+    "L",
+    "XL",
+    "2XL",
+    "3XL",
+    "4XL",
+    "5XL",
   ];
 
-  // 💡 أهم تعديل: فك شفرة الداتا اللي جاية من الداتابيز لما نغير الموديل
+  // ==========================================
+  // 3. Load active model
+  // ==========================================
+
   useEffect(() => {
     setModelName(activeModel?.name || "");
     setNotes(activeModel?.customer_notes || "");
+
+    // Main image
     setImagePreview(activeModel?.image_url || null);
     setImageFile(null);
+
+    // Close-up images
     setCloseUpFiles([]);
     setCloseUpPreviews(activeModel?.close_up_images || []);
 
-    // 1. الألوان
+    // ==========================================
+    // Colors
+    // ==========================================
+
     let parsedColors = [
       {
         variant: 1,
         part: "",
-        color: ""
-      }
+        color: "",
+      },
     ];
+
     if (activeModel?.colors?.length > 0) {
       parsedColors = activeModel.colors.map((item) => {
-        // دعم الداتا القديمة لو كانت ["أبيض", "أسود"]
+        // Old format:
+        // ["أبيض", "أسود"]
+
         if (typeof item === "string") {
           return {
             variant: 1,
@@ -72,43 +129,56 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
     }
 
     setColors(parsedColors);
-    // 2. الخامات والمقاسات (مستخبية جوه الـ description)
-    // 2. الخامات والمقاسات (مستخبية جوه الـ description)
-    let parsedFabrics = [{ name: "", weight: "" }];
+
+    // ==========================================
+    // Fabrics + Sizes
+    // ==========================================
+
+    let parsedFabrics = [
+      {
+        name: "",
+        weight: "",
+      },
+    ];
+
     let parsedSizesFromDesc = [];
 
     if (activeModel?.description) {
       try {
         const descData = JSON.parse(activeModel.description);
 
-        // 💡 1. معالجة الخامات (حماية ضد غباء الـ AI)
-        if (descData.fabrics && descData.fabrics.length > 0) {
-          parsedFabrics = descData.fabrics.map(fabric => {
-            // لو الـ AI رجعها نص مباشر بدل Object
-            if (typeof fabric === 'string') {
-              return { name: fabric, weight: "" };
+        // Fabrics
+        if (descData?.fabrics?.length > 0) {
+          parsedFabrics = descData.fabrics.map((fabric) => {
+            if (typeof fabric === "string") {
+              return {
+                name: fabric,
+                weight: "",
+              };
             }
-            // لو رجعها Object نضمن إن القيم مش undefined
+
             return {
-              name: fabric.name || "",
-              weight: fabric.weight || ""
+              name: fabric?.name || "",
+              weight: fabric?.weight || "",
             };
           });
         }
 
-        // 💡 2. معالجة المقاسات (توحيد كلمة سنين لـ سنوات)
-        if (descData.sizes && descData.sizes.length > 0) {
-          parsedSizesFromDesc = descData.sizes.map(size => {
-            // لو الـ AI كتب "سنين" نبدلها بـ "سنوات" عشان تطابق الزراير
-            if (typeof size === 'string') {
+        // Sizes
+        if (descData?.sizes?.length > 0) {
+          parsedSizesFromDesc = descData.sizes.map((size) => {
+            if (typeof size === "string") {
               return size.replace("سنين", "سنوات");
             }
+
             return size;
           });
         }
-
-      } catch (e) {
-        console.error("تعذر فك شفرة البيانات من الـ description", e);
+      } catch (error) {
+        console.error(
+          "تعذر فك شفرة البيانات من الـ description",
+          error
+        );
       }
     } else if (activeModel?.fabrics?.length > 0) {
       parsedFabrics = activeModel.fabrics;
@@ -116,78 +186,177 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
 
     setFabrics(parsedFabrics);
 
-    // 3. دمج أو اختيار المقاسات الصحيحة
+    // ==========================================
+    // Sizes priority
+    // ==========================================
+
     let finalParsedSizes = [];
 
-    // الأولوية للمقاسات اللي جاية من הـ description (زي ما ظاهر في الصورة)
+    // 1. description
     if (parsedSizesFromDesc.length > 0) {
       finalParsedSizes = parsedSizesFromDesc;
     }
-    // بعدين نجرب العلاقات (model_sizes)
-    else if (activeModel?.model_sizes && activeModel.model_sizes.length > 0) {
-      finalParsedSizes = activeModel.model_sizes.map(item => item.sizes?.name).filter(Boolean);
+
+    // 2. model_sizes relation
+    else if (
+      activeModel?.model_sizes &&
+      activeModel.model_sizes.length > 0
+    ) {
+      finalParsedSizes = activeModel.model_sizes
+        .map((item) => item?.sizes?.name)
+        .filter(Boolean);
     }
-    // بعدين نجرب المصفوفات العادية
+
+    // 3. sizes
     else if (activeModel?.sizes?.length > 0) {
       finalParsedSizes = activeModel.sizes;
-    } else if (activeModel?.selectedSizes?.length > 0) {
+    }
+
+    // 4. selectedSizes
+    else if (activeModel?.selectedSizes?.length > 0) {
       finalParsedSizes = activeModel.selectedSizes;
     }
 
     setSelectedSizes(finalParsedSizes);
-
   }, [activeModel]);
 
   // ==========================================
-  // دوال التعامل مع صور التفاصيل
+  // 4. Close-up images
   // ==========================================
+
   const handleCloseUpChange = (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length > 0) {
-      setCloseUpFiles((prev) => [...prev, ...files]);
-      const newPreviews = files.map((file) => URL.createObjectURL(file));
-      setCloseUpPreviews((prev) => [...prev, ...newPreviews]);
+    const files = Array.from(e.target.files || []);
+
+    if (!files.length) return;
+
+    const remainingSlots = 8 - closeUpPreviews.length;
+
+    if (remainingSlots <= 0) {
+      toast.error("يمكنك رفع 8 صور تفاصيل كحد أقصى");
+      return;
     }
+
+    const selectedFiles = files.slice(0, remainingSlots);
+
+    const newPreviews = selectedFiles.map((file) =>
+      URL.createObjectURL(file)
+    );
+
+    setCloseUpFiles((prev) => [
+      ...prev,
+      ...selectedFiles,
+    ]);
+
+    setCloseUpPreviews((prev) => [
+      ...prev,
+      ...newPreviews,
+    ]);
+
+    // مهم جدًا:
+    // يسمح باختيار نفس الصورة مرة أخرى
+    e.target.value = "";
   };
 
   const removeCloseUpImage = (index) => {
-    const isExistingUrl = typeof closeUpPreviews[index] === "string" && closeUpPreviews[index].startsWith("http");
+    const preview = closeUpPreviews[index];
 
-    setCloseUpPreviews((prev) => prev.filter((_, i) => i !== index));
+    if (!preview) return;
 
-    if (!isExistingUrl) {
-      const existingUrlsCount = closeUpPreviews.filter(p => typeof p === 'string' && p.startsWith('http')).length;
-      const fileIndex = index - existingUrlsCount;
-      if (fileIndex >= 0) {
-        setCloseUpFiles((prev) => prev.filter((_, i) => i !== fileIndex));
-      }
+    // ==========================================
+    // Existing Cloudinary URL
+    // ==========================================
+
+    if (
+      typeof preview === "string" &&
+      preview.startsWith("http")
+    ) {
+      setCloseUpPreviews((prev) =>
+        prev.filter((_, i) => i !== index)
+      );
+
+      return;
     }
+
+    // ==========================================
+    // New local image
+    // ==========================================
+
+    // نحدد كل الصور المحلية قبل الصورة الحالية
+    const localImagesBeforeCurrent =
+      closeUpPreviews
+        .slice(0, index)
+        .filter(
+          (item) =>
+            typeof item === "string" &&
+            !item.startsWith("http")
+        ).length;
+
+    const fileIndex = localImagesBeforeCurrent;
+
+    setCloseUpFiles((prev) =>
+      prev.filter((_, i) => i !== fileIndex)
+    );
+
+    // إلغاء الـ object URL
+    try {
+      URL.revokeObjectURL(preview);
+    } catch (error) {
+      console.warn(
+        "Could not revoke object URL:",
+        error
+      );
+    }
+
+    setCloseUpPreviews((prev) =>
+      prev.filter((_, i) => i !== index)
+    );
   };
 
   // ==========================================
-  // 2. إدارة الخامات وأوزانها
+  // 5. Fabrics
   // ==========================================
-  const addFabric = () => setFabrics([...fabrics, { name: "", weight: "" }]);
+
+  const addFabric = () => {
+    setFabrics((prev) => [
+      ...prev,
+      {
+        name: "",
+        weight: "",
+      },
+    ]);
+  };
+
   const updateFabric = (index, field, value) => {
-    const updatedFabrics = [...fabrics];
-    updatedFabrics[index][field] = value;
-    setFabrics(updatedFabrics);
+    setFabrics((prev) => {
+      const updated = [...prev];
+
+      updated[index] = {
+        ...updated[index],
+        [field]: value,
+      };
+
+      return updated;
+    });
   };
+
   const removeFabric = (index) => {
-    setFabrics(fabrics.filter((_, i) => i !== index));
+    setFabrics((prev) =>
+      prev.filter((_, i) => i !== index)
+    );
   };
 
   // ==========================================
-  // 3. إدارة الألوان
+  // 6. Colors
   // ==========================================
+
   const addColor = () => {
     const lastVariant =
       colors.length > 0
         ? Number(colors[colors.length - 1]?.variant) || 1
         : 1;
 
-    setColors([
-      ...colors,
+    setColors((prev) => [
+      ...prev,
       {
         variant: lastVariant,
         part: "",
@@ -197,272 +366,664 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
   };
 
   const updateColor = (index, field, value) => {
-    const updatedColors = [...colors];
+    setColors((prev) => {
+      const updated = [...prev];
 
-    updatedColors[index] = {
-      ...updatedColors[index],
-      [field]: value,
-    };
+      updated[index] = {
+        ...updated[index],
+        [field]: value,
+      };
 
-    setColors(updatedColors);
+      return updated;
+    });
   };
 
   const removeColor = (index) => {
-    setColors(colors.filter((_, i) => i !== index));
+    setColors((prev) =>
+      prev.filter((_, i) => i !== index)
+    );
   };
 
   // ==========================================
-  // 4. إدارة المقاسات
+  // 7. Sizes
   // ==========================================
+
   const toggleSize = (size) => {
-    if (selectedSizes.includes(size)) {
-      setSelectedSizes(selectedSizes.filter((s) => s !== size));
-    } else {
-      setSelectedSizes([...selectedSizes, size]);
-    }
+    setSelectedSizes((prev) => {
+      if (prev.includes(size)) {
+        return prev.filter((s) => s !== size);
+      }
+
+      return [...prev, size];
+    });
   };
 
   // ==========================================
-  // 5. دوال معالجة الصورة والتواصل مع السيرفر
+  // 8. Main image
   // ==========================================
+
   const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
+    const file = e.target.files?.[0];
+
+    if (!file) return;
+
+    // تنظيف الـ preview القديم لو كان local
+    if (
+      imagePreview &&
+      typeof imagePreview === "string" &&
+      imagePreview.startsWith("blob:")
+    ) {
+      try {
+        URL.revokeObjectURL(imagePreview);
+      } catch { }
     }
+
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+
+    // يسمح باختيار نفس الصورة مرة أخرى
+    e.target.value = "";
   };
+
+  // ==========================================
+  // 9. Cloudinary upload
+  // ==========================================
 
   const uploadToCloudinary = async (file) => {
     const formData = new FormData();
+
     formData.append("file", file);
-    formData.append("upload_preset", import.meta.env.VITE_UPLOAD_PRESET);
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUD_NAME}/image/upload`, {
-      method: "POST",
-      body: formData,
-    });
-    const data = await res.json();
+    formData.append(
+      "upload_preset",
+      import.meta.env.VITE_UPLOAD_PRESET
+    );
+
+    const cloudName =
+      import.meta.env.VITE_CLOUD_NAME;
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Cloudinary upload failed: ${response.status}`
+      );
+    }
+
+    const data = await response.json();
+
+    if (!data?.secure_url) {
+      throw new Error(
+        "Cloudinary did not return secure_url"
+      );
+    }
+
     return data.secure_url;
   };
 
+  // ==========================================
+  // 10. Upload current images
+  // ==========================================
+
+  const uploadCurrentImages = async () => {
+    let finalImageUrl =
+      activeModel?.image_url || null;
+
+    // ==========================================
+    // Main image
+    // ==========================================
+
+    if (imageFile) {
+      finalImageUrl = await uploadToCloudinary(
+        imageFile
+      );
+    }
+
+    // ==========================================
+    // Close-up images
+    // ==========================================
+
+    const existingCloseUpUrls =
+      closeUpPreviews.filter(
+        (preview) =>
+          typeof preview === "string" &&
+          preview.startsWith("http")
+      );
+
+    let uploadedCloseUpUrls = [];
+
+    if (closeUpFiles.length > 0) {
+      uploadedCloseUpUrls =
+        await Promise.all(
+          closeUpFiles.map((file) =>
+            uploadToCloudinary(file)
+          )
+        );
+    }
+
+    const finalCloseUpUrls = [
+      ...existingCloseUpUrls,
+      ...uploadedCloseUpUrls,
+    ];
+
+    return {
+      finalImageUrl,
+      finalCloseUpUrls,
+    };
+  };
+
+  // ==========================================
+  // 11. Create / Generate Tech Pack
+  // ==========================================
+
   const handleSubmitAndGenerate = async () => {
-    if (!modelName) {
-      toast.error("برجاء إدخال اسم الموديل أولاً");
+    if (!modelName?.trim()) {
+      toast.error(
+        "برجاء إدخال اسم الموديل أولاً"
+      );
       return;
     }
 
     setIsGenerating(true);
-    let finalImageUrl = activeModel.image_url;
-    let finalCloseUpUrls = closeUpPreviews.filter(p => typeof p === 'string' && p.startsWith("http"));
 
     try {
-      if (imageFile) {
-        toast.info("جاري رفع الصورة الرئيسية...");
-        finalImageUrl = await uploadToCloudinary(imageFile);
-      }
+      toast.info(
+        "جاري تجهيز الصور..."
+      );
 
-      if (closeUpFiles.length > 0) {
-        toast.info("جاري رفع صور التفاصيل...");
-        const uploadedCloseUps = await Promise.all(
-          closeUpFiles.map((file) => uploadToCloudinary(file))
-        );
-        finalCloseUpUrls = [...finalCloseUpUrls, ...uploadedCloseUps];
-      }
-
-      toast.info("جاري حفظ بيانات الموديل وإرسالها للذكاء الاصطناعي 🤖...");
+      const {
+        finalImageUrl,
+        finalCloseUpUrls,
+      } = await uploadCurrentImages();
 
       const payload = {
         name: modelName,
-        notes: notes,
+        notes,
         image_url: finalImageUrl,
         close_up_images: finalCloseUpUrls,
-        fabrics: fabrics.filter(f => f.name !== ""),
+
+        fabrics: fabrics.filter(
+          (f) => f.name?.trim()
+        ),
+
         colors: colors.filter(
-          (item) => item.part?.trim() || item.color?.trim()
+          (item) =>
+            item.part?.trim() ||
+            item.color?.trim()
         ),
-        selectedSizes: selectedSizes,
-        brand_name: brandName,
-        collection_id: activeModel.collection_id
-      };
 
-      await handleUpdateModelAndGenerateTechPack(activeModel.id, payload);
-
-      toast.info("جاري تحديث سجلات المقاسات والخامات...");
-      await handleUpdateModelRelations(activeModel.id, payload.fabrics, payload.selectedSizes);
-
-      // 💡 التحديث المحلي للواجهة الأم عشان الداتا تفضل محفوظة في الـ Tabs
-      onModelChange("tech_pack_status", "created");
-      onModelChange("image_url", finalImageUrl);
-      onModelChange("close_up_images", finalCloseUpUrls);
-      onModelChange("name", modelName);
-      onModelChange("customer_notes", notes);
-      onModelChange("fabrics", payload.fabrics);
-      onModelChange("colors", payload.colors);
-      onModelChange("sizes", payload.selectedSizes);
-      // تحديث الـ description محلياً كمان كاحتياطي
-      onModelChange("description", JSON.stringify({ fabrics: payload.fabrics, colors: payload.colors, sizes: payload.selectedSizes }));
-      onModelChange("hasError", false);
-
-      setCloseUpFiles([]);
-      setCloseUpPreviews(finalCloseUpUrls);
-
-      toast.success("تم الحفظ وإرسال الطلب بنجاح! جاري إنشاء الورقة الفنية 🎉");
-
-    } catch (error) {
-      console.error(error);
-      toast.error("حدث خطأ أثناء الإنشاء أو الاتصال بالخادم");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handleUpdateTechPack = async () => {
-    try {
-      setIsGenerating(true);
-
-      // 1. البيانات الحالية التي عدلها المستخدم في الفورم
-      const payload = {
-        name: modelName,
-        notes: notes,
-        image_url: activeModel.image_url,
-        close_up_images: closeUpPreviews.filter(
-          (p) => typeof p === "string" && p.startsWith("http")
-        ),
-        fabrics: fabrics.filter((f) => f.name?.trim()),
-        colors: colors.filter(
-          (item) => item.part?.trim() || item.color?.trim()
-        ),
         selectedSizes,
+
+        brand_name: brandName,
+        collection_id:
+          activeModel.collection_id,
       };
 
-      // 2. حفظ التعديلات في جدول models
-      const { data: updatedModel, error: modelError } = await supabase
-        .from("models")
-        .update({
-          name: payload.name,
-          customer_notes: payload.notes,
-          image_url: payload.image_url,
-          close_up_images: payload.close_up_images,
-          colors: payload.colors,
+      toast.info(
+        "جاري حفظ بيانات الموديل وإرسالها للذكاء الاصطناعي 🤖..."
+      );
 
-          description: JSON.stringify({
-            fabrics: payload.fabrics,
-            colors: payload.colors,
-            sizes: payload.selectedSizes,
-          }),
+      await handleUpdateModelAndGenerateTechPack(
+        activeModel.id,
+        payload
+      );
 
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", activeModel.id)
-        .select()
-        .single();
-
-      if (modelError) throw modelError;
-
-      // 3. تحديث علاقات المقاسات والخامات
       await handleUpdateModelRelations(
         activeModel.id,
         payload.fabrics,
         payload.selectedSizes
       );
 
-      // 4. هات آخر Tech Pack موجود
-      const { data: latestTechPack, error: techPackError } = await supabase
-        .from("tech_packs")
-        .select("content")
-        .eq("model_id", activeModel.id)
-        .order("version", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // ==========================================
+      // Update local state
+      // ==========================================
 
-      if (techPackError) throw techPackError;
+      onModelChange(
+        "tech_pack_status",
+        "created"
+      );
 
-      // 5. احتفظ بكل بيانات الـ Tech Pack القديمة
-      const oldContent = latestTechPack?.content || {};
+      onModelChange(
+        "image_url",
+        finalImageUrl
+      );
 
-      // 6. اعمل نسخة جديدة من الـ Tech Pack
-      // ونغيّر فقط البيانات التي عدّلها المستخدم
+      onModelChange(
+        "close_up_images",
+        finalCloseUpUrls
+      );
+
+      onModelChange(
+        "name",
+        modelName
+      );
+
+      onModelChange(
+        "customer_notes",
+        notes
+      );
+
+      onModelChange(
+        "fabrics",
+        payload.fabrics
+      );
+
+      onModelChange(
+        "colors",
+        payload.colors
+      );
+
+      onModelChange(
+        "sizes",
+        payload.selectedSizes
+      );
+
+      onModelChange(
+        "description",
+        JSON.stringify({
+          fabrics: payload.fabrics,
+          colors: payload.colors,
+          sizes: payload.selectedSizes,
+        })
+      );
+
+      onModelChange(
+        "hasError",
+        false
+      );
+
+      // ==========================================
+      // Reset uploaded files
+      // ==========================================
+
+      setImageFile(null);
+      setCloseUpFiles([]);
+      setImagePreview(finalImageUrl);
+      setCloseUpPreviews(finalCloseUpUrls);
+
+      toast.success(
+        "تم الحفظ وإرسال الطلب بنجاح! 🎉"
+      );
+    } catch (error) {
+      console.error(
+        "CREATE TECH PACK ERROR:",
+        error
+      );
+
+      toast.error(
+        "حدث خطأ أثناء الإنشاء أو رفع الصور"
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // ==========================================
+  // 12. UPDATE TECH PACK
+  // ==========================================
+
+  const handleUpdateTechPack = async () => {
+    if (!modelName?.trim()) {
+      toast.error(
+        "برجاء إدخال اسم الموديل أولاً"
+      );
+      return;
+    }
+
+    setIsGenerating(true);
+
+    try {
+      // ==========================================
+      // STEP 1
+      // Upload only new images
+      // ==========================================
+
+      toast.info(
+        "جاري تجهيز الصور والتعديلات..."
+      );
+
+      const {
+        finalImageUrl,
+        finalCloseUpUrls,
+      } = await uploadCurrentImages();
+
+      // ==========================================
+      // STEP 2
+      // Prepare payload
+      // ==========================================
+
+      const payload = {
+        name: modelName,
+        notes,
+
+        image_url: finalImageUrl,
+
+        close_up_images:
+          finalCloseUpUrls,
+
+        fabrics: fabrics.filter(
+          (f) => f.name?.trim()
+        ),
+
+        colors: colors.filter(
+          (item) =>
+            item.part?.trim() ||
+            item.color?.trim()
+        ),
+
+        selectedSizes,
+      };
+
+      // ==========================================
+      // STEP 3
+      // Update model
+      // ==========================================
+
+      const { data: updatedModel, error: modelError } =
+        await supabase
+          .from("models")
+          .update({
+            name: payload.name,
+
+            customer_notes:
+              payload.notes,
+
+            image_url:
+              payload.image_url,
+
+            close_up_images:
+              payload.close_up_images,
+
+            colors:
+              payload.colors,
+
+            description:
+              JSON.stringify({
+                fabrics:
+                  payload.fabrics,
+
+                colors:
+                  payload.colors,
+
+                sizes:
+                  payload.selectedSizes,
+              }),
+
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq("id", activeModel.id)
+          .select()
+          .single();
+
+      if (modelError) {
+        throw modelError;
+      }
+
+      // ==========================================
+      // STEP 4
+      // Fetch latest Tech Pack + relations
+      // IN PARALLEL
+      // ==========================================
+
+      const [
+        _relationsResult,
+        latestTechPackResult,
+      ] = await Promise.all([
+        handleUpdateModelRelations(
+          activeModel.id,
+          payload.fabrics,
+          payload.selectedSizes
+        ),
+
+        supabase
+          .from("tech_packs")
+          .select("content, version")
+          .eq(
+            "model_id",
+            activeModel.id
+          )
+          .order("version", {
+            ascending: false,
+          })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      const {
+        data: latestTechPack,
+        error: techPackError,
+      } = latestTechPackResult;
+
+      if (techPackError) {
+        throw techPackError;
+      }
+
+      // ==========================================
+      // STEP 5
+      // Preserve old Tech Pack data
+      // ==========================================
+
+      const oldContent =
+        latestTechPack?.content || {};
+
+      // ==========================================
+      // STEP 6
+      // Create new Tech Pack content
+      // ==========================================
+
       const techPackContent = {
         ...oldContent,
 
         basic_info: {
           ...(oldContent.basic_info || {}),
 
-          product_name: updatedModel.name,
-          brand: brandName,
-          main_fabric: payload.fabrics,
-          size_range: payload.selectedSizes.join(" - "),
-          colors: payload.colors,
+          product_name:
+            updatedModel.name,
+
+          brand:
+            brandName,
+
+          main_fabric:
+            payload.fabrics,
+
+          size_range:
+            payload.selectedSizes.join(
+              " - "
+            ),
+
+          colors:
+            payload.colors,
+
+          // NEW MAIN IMAGE
+          image_url:
+            payload.image_url,
         },
 
-        // مهم جدًا:
-        // لا نلمس technical_description
         technical_description: {
-          ...(oldContent.technical_description || {}),
+          ...(oldContent.technical_description ||
+            {}),
+
+          // NEW CLOSE-UP IMAGES
+          close_up_images:
+            payload.close_up_images,
         },
       };
 
-      // 5. معرفة آخر Version
-      const { data: oldTechPack, error: versionError } = await supabase
-        .from("tech_packs")
-        .select("version")
-        .eq("model_id", activeModel.id)
-        .order("version", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // ==========================================
+      // STEP 7
+      // Insert new version
+      // ==========================================
 
-      if (versionError) throw versionError;
+      const newVersion =
+        (latestTechPack?.version || 0) + 1;
 
-      const newVersion = (oldTechPack?.version || 0) + 1;
-
-      // 6. إنشاء نسخة Tech Pack جديدة
-      const { error: insertError } = await supabase
+      const {
+        error: insertError,
+      } = await supabase
         .from("tech_packs")
         .insert({
-          model_id: activeModel.id,
-          content: techPackContent,
-          status: "generated",
-          version: newVersion,
+          model_id:
+            activeModel.id,
+
+          content:
+            techPackContent,
+
+          status:
+            "generated",
+
+          version:
+            newVersion,
         });
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        throw insertError;
+      }
 
-      // 7. تحديث الـ UI المحلي
-      onModelChange("colors", payload.colors);
-      onModelChange("fabrics", payload.fabrics);
-      onModelChange("sizes", payload.selectedSizes);
-      onModelChange("description", JSON.stringify({
-        fabrics: payload.fabrics,
-        colors: payload.colors,
-        sizes: payload.selectedSizes,
-      }));
-      onModelChange("tech_pack_status", "created");
-      onModelChange("updated_at", new Date().toISOString());
+      // ==========================================
+      // STEP 8
+      // Update local UI
+      // ==========================================
 
-      toast.success("تم تحديث الموديل والـ Tech Pack بنجاح ✅");
+      onModelChange(
+        "name",
+        payload.name
+      );
 
+      onModelChange(
+        "customer_notes",
+        payload.notes
+      );
+
+      onModelChange(
+        "image_url",
+        payload.image_url
+      );
+
+      onModelChange(
+        "close_up_images",
+        payload.close_up_images
+      );
+
+      onModelChange(
+        "colors",
+        payload.colors
+      );
+
+      onModelChange(
+        "fabrics",
+        payload.fabrics
+      );
+
+      onModelChange(
+        "sizes",
+        payload.selectedSizes
+      );
+
+      onModelChange(
+        "description",
+        JSON.stringify({
+          fabrics:
+            payload.fabrics,
+
+          colors:
+            payload.colors,
+
+          sizes:
+            payload.selectedSizes,
+        })
+      );
+
+      onModelChange(
+        "tech_pack_status",
+        "created"
+      );
+
+      onModelChange(
+        "updated_at",
+        new Date().toISOString()
+      );
+
+      // ==========================================
+      // STEP 9
+      // Clear pending files
+      // ==========================================
+
+      setImageFile(null);
+      setCloseUpFiles([]);
+
+      setImagePreview(
+        payload.image_url
+      );
+
+      setCloseUpPreviews(
+        payload.close_up_images
+      );
+
+      toast.success(
+        "تم تحديث الموديل والـ Tech Pack بنجاح ✅"
+      );
     } catch (error) {
-      console.error("UPDATE TECH PACK ERROR:", error);
-      toast.error("حدث خطأ أثناء تحديث الموديل والـ Tech Pack");
+      console.error(
+        "UPDATE TECH PACK ERROR:",
+        error
+      );
+
+      toast.error(
+        error?.message ||
+        "حدث خطأ أثناء تحديث الموديل والـ Tech Pack"
+      );
     } finally {
       setIsGenerating(false);
     }
   };
 
+  // ==========================================
+  // Return
+  // ==========================================
+
   return {
-    modelName, setModelName,
-    notes, setNotes,
-    imageFile, imagePreview,
+    modelName,
+    setModelName,
+
+    notes,
+    setNotes,
+
+    imageFile,
+    imagePreview,
+
     isGenerating,
+
     sizesList,
-    fabrics, addFabric, updateFabric, removeFabric,
-    colors, addColor, updateColor, removeColor,
-    selectedSizes, toggleSize,
+
+    fabrics,
+    addFabric,
+    updateFabric,
+    removeFabric,
+
+    colors,
+    addColor,
+    updateColor,
+    removeColor,
+
+    selectedSizes,
+    toggleSize,
+
     handleImageChange,
+
     handleSubmitAndGenerate,
+
+    closeUpFiles,
     closeUpPreviews,
+
     handleCloseUpChange,
     removeCloseUpImage,
-    handleUpdateTechPack
+
+    handleUpdateTechPack,
   };
 };

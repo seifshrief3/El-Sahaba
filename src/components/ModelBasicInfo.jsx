@@ -6,22 +6,22 @@ const ModelBasicInfo = ({
   setModelName,
   imagePreview,
   handleImageChange,
-  // 💡 ضفنا الـ Props دي عشان صور التفاصيل
   closeUpPreviews,
   handleCloseUpChange,
   removeCloseUpImage,
 }) => {
   return (
     <>
-      {/* هيدر الموديل والتنبيه */}
       <div>
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-bold text-[#1a365d] flex items-center gap-2">
             {activeModel.name || "اسم الموديل"}
+
             <span className="text-sm font-normal text-slate-400">
               — {activeModel.code || "كود الموديل"}
             </span>
           </h3>
+
           <div className="flex items-center gap-4">
             {activeModel.hasError && (
               <span className="bg-red-50 text-[#b91c1c] px-3 py-1 rounded text-xs font-bold border border-red-100">
@@ -41,23 +41,23 @@ const ModelBasicInfo = ({
 
       <hr className="border-slate-100 mb-6" />
 
-      {/* القسم الأول: البيانات الأساسية للموديل */}
       <div>
         <h4 className="text-base font-bold text-[#1a365d] mb-1">
           البيانات الأساسية والصور
         </h4>
+
         <p className="text-sm text-slate-500 mb-6 text-right">
           أدخل المواصفات والصور، وسيقوم الذكاء الاصطناعي ببناء الورقة الفنية
           وتحليل التفاصيل.
         </p>
 
-        {/* رفع الصور (الرئيسية + التفاصيل) */}
         <div className="flex flex-wrap gap-8 mb-8">
-          {/* 1. الصورة الرئيسية */}
+          {/* Main Image */}
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2 text-right">
               صورة الموديل المرجعية (الرئيسية) *
             </label>
+
             <label className="flex flex-col items-center justify-center w-32 h-32 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition hover:border-[#1a365d] overflow-hidden relative">
               {imagePreview ? (
                 <img
@@ -68,11 +68,13 @@ const ModelBasicInfo = ({
               ) : (
                 <>
                   <span className="text-3xl text-slate-400 mb-1">+</span>
+
                   <span className="text-xs text-slate-500 font-medium text-center px-2">
                     إرفاق صورة
                   </span>
                 </>
               )}
+
               <input
                 type="file"
                 className="hidden"
@@ -82,15 +84,16 @@ const ModelBasicInfo = ({
             </label>
           </div>
 
-          {/* 2. صور التفاصيل (Close-ups) */}
+          {/* Close Ups */}
           <div className="flex-1">
             <label className="block text-sm font-bold text-slate-700 mb-2 text-right">
               صور تفاصيل الموديل (زووم) - اختياري
             </label>
+
             <div className="flex flex-wrap gap-3">
               {closeUpPreviews?.map((preview, index) => (
                 <div
-                  key={index}
+                  key={`${preview}-${index}`}
                   className="relative w-20 h-20 border rounded-lg overflow-hidden group"
                 >
                   <img
@@ -98,6 +101,7 @@ const ModelBasicInfo = ({
                     alt={`Detail ${index + 1}`}
                     className="w-full h-full object-cover"
                   />
+
                   <button
                     type="button"
                     onClick={() => removeCloseUpImage(index)}
@@ -108,18 +112,19 @@ const ModelBasicInfo = ({
                 </div>
               ))}
 
-              {/* زر إضافة صور تفاصيل إضافية (بحد أقصى 8 صور مثلاً) */}
               {(closeUpPreviews?.length || 0) < 8 && (
                 <label className="flex flex-col items-center justify-center w-20 h-20 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition hover:border-[#1a365d]">
                   <span className="text-2xl text-slate-400 mb-1">+</span>
+
                   <span className="text-[10px] text-slate-500 font-medium text-center">
                     تفاصيل
                   </span>
+
                   <input
                     type="file"
                     className="hidden"
                     accept="image/*"
-                    multiple // 💡 يسمح برفع كذا صورة مع بعض
+                    multiple
                     onChange={handleCloseUpChange}
                   />
                 </label>
@@ -128,12 +133,13 @@ const ModelBasicInfo = ({
           </div>
         </div>
 
-        {/* اسم الموديل وكوده */}
+        {/* Model Name + Number */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2 text-right">
               اسم المنتج *
             </label>
+
             <input
               type="text"
               value={modelName}
@@ -142,10 +148,12 @@ const ModelBasicInfo = ({
               className="w-full border border-slate-300 rounded-lg p-3 text-sm text-right focus:outline-none focus:border-[#1a365d] bg-white"
             />
           </div>
+
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2 text-right">
               رقم الموديل (تلقائي)
             </label>
+
             <input
               type="text"
               disabled

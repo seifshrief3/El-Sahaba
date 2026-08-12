@@ -1,6 +1,6 @@
 import { X, Plus, Trash2, Box } from "lucide-react";
 import React, { useState, useEffect } from "react";
-import { supabase } from "../../supabase"; // تأكد من المسار
+import { supabase } from "../../supabase";
 import { toast } from "sonner";
 
 const AddNewShipment = ({ setOpenModal, onSuccess }) => {
@@ -12,7 +12,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
   const [customers, setCustomers] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([]);
 
-  // عناصر الشحنة (المنتجات اللي تم اختيارها)
+  // عناصر الشحنة
   const [selectedItems, setSelectedItems] = useState([]);
   const [currentItem, setCurrentItem] = useState("");
   const [currentQty, setCurrentQty] = useState("");
@@ -21,7 +21,6 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
   const [formData, setFormData] = useState({
     brand_id: "",
     customer_id: "",
-    boxes_count: "",
     shipping_company: "",
     tracking_number: "",
     status: "preparing",
@@ -34,12 +33,18 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
   const closeModal = () => {
     setIsOpen(false);
-    setTimeout(() => setOpenModal(false), 300);
+
+    setTimeout(() => {
+      setOpenModal(false);
+    }, 300);
   };
 
   const fetchBrands = async () => {
     const { data, error } = await supabase.from("brands").select("id, name_ar");
-    if (!error && data) setBrands(data);
+
+    if (!error && data) {
+      setBrands(data);
+    }
   };
 
   useEffect(() => {
@@ -51,36 +56,43 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
     }
 
     const fetchBrandData = async () => {
-      // 1. جلب بيانات العملاء
+      // 1. جلب العملاء
       const { data: custData } = await supabase
         .from("customers")
         .select("id, name")
         .eq("brand_id", formData.brand_id);
 
-      if (custData) setCustomers(custData);
+      if (custData) {
+        setCustomers(custData);
+      }
 
-      // 💡 2. خطوة إضافية: جلب كل المقاسات لعمل "قاموس ترجمة" (أضمن طريقة)
+      // 2. جلب المقاسات
       const { data: sizesData } = await supabase
         .from("sizes")
         .select("id, name");
+
       const sizeMap = {};
+
       if (sizesData) {
         sizesData.forEach((s) => {
-          sizeMap[s.id] = s.name; // ربط الـ UUID باسم المقاس
+          sizeMap[s.id] = s.name;
         });
       }
 
-      // 3. جلب الأرصدة (رجعنا الاستعلام زي ما كان عشان الداتابيز متضربش)
+      // 3. جلب الأرصدة المتاحة
       const { data: invData, error: invError } = await supabase
         .from("inventory")
         .select(
           `
-          id, size, color, available_qty, 
-          models (name),
-          production_orders!inner (
-            collections!inner (brand_id)
-          )
-        `,
+            id,
+            size,
+            color,
+            available_qty,
+            models (name),
+            production_orders!inner (
+              collections!inner (brand_id)
+            )
+          `,
         )
         .eq("production_orders.collections.brand_id", formData.brand_id)
         .gt("available_qty", 0);
@@ -91,7 +103,6 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
       if (invData) {
         const formattedInv = invData.map((item) => {
-          // 💡 هنا بنترجم الـ ID اللي راجع من الداتابيز للاسم الحقيقي بتاعه (S, M, L)
           const realSizeName = sizeMap[item.size] || item.size;
 
           return {
@@ -100,6 +111,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
             available: item.available_qty,
           };
         });
+
         setInventoryItems(formattedInv);
       }
     };
@@ -109,7 +121,11 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const handleAddItem = () => {
@@ -132,6 +148,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
     const alreadyExists = selectedItems.find(
       (i) => i.inventory_id === currentItem,
     );
+
     if (alreadyExists) {
       toast.error(
         "هذا المنتج مضاف بالفعل للقائمة، يمكنك حذفه وإضافته بالكمية الجديدة.",
@@ -171,8 +188,11 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
     }
 
     setIsSubmitting(true);
+
     try {
-      const shipmentNumber = `SHP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const shipmentNumber = `SHP-${new Date().getFullYear()}-${Math.floor(
+        1000 + Math.random() * 9000,
+      )}`;
 
       // 1. إدخال الشحنة الأساسية
       const { data: newShipment, error: shipError } = await supabase
@@ -182,9 +202,6 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
             shipment_number: shipmentNumber,
             brand_id: formData.brand_id,
             customer_id: formData.customer_id,
-            boxes_count: formData.boxes_count
-              ? parseInt(formData.boxes_count)
-              : 0,
             shipping_company: formData.shipping_company,
             tracking_number: formData.tracking_number,
             status: formData.status,
@@ -195,7 +212,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
       if (shipError) throw shipError;
 
-      // 💡 2. إدخال عناصر الشحنة في جدول shipment_items
+      // 2. إدخال عناصر الشحنة
       const shipmentItemsData = selectedItems.map((item) => ({
         shipment_id: newShipment.id,
         inventory_id: item.inventory_id,
@@ -208,7 +225,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
       if (itemsError) throw itemsError;
 
-      // 3. تحديث جدول inventory لخصم الكميات
+      // 3. تحديث المخزون
       for (const item of selectedItems) {
         const { data: currentInv } = await supabase
           .from("inventory")
@@ -224,9 +241,11 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
             .from("inventory")
             .update({
               available_qty: currentInv.available_qty - item.quantity,
+
               reserved_qty: isShipped
                 ? currentInv.reserved_qty
                 : currentInv.reserved_qty + item.quantity,
+
               shipped_qty: isShipped
                 ? currentInv.shipped_qty + item.quantity
                 : currentInv.shipped_qty,
@@ -236,10 +255,15 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
       }
 
       toast.success("تم إنشاء الشحنة وحفظ العناصر بنجاح!");
-      if (onSuccess) onSuccess();
+
+      if (onSuccess) {
+        onSuccess();
+      }
+
       closeModal();
     } catch (error) {
       console.error("Error saving shipment:", error);
+
       toast.error("حدث خطأ أثناء إنشاء الشحنة.");
     } finally {
       setIsSubmitting(false);
@@ -248,27 +272,33 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
   return (
     <>
+      {/* Overlay */}
       <div
         onClick={closeModal}
         className={`fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300 ${
           isOpen ? "opacity-100" : "opacity-0"
         }`}
       />
+
+      {/* Modal */}
       <div
         className={`fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[95%] max-w-3xl -translate-x-1/2 -translate-y-1/2 flex-col rounded-[2rem] bg-white shadow-2xl font-arabic transition-all duration-300 ${
           isOpen ? "scale-100 opacity-100" : "scale-95 opacity-0"
         }`}
         dir="rtl"
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 p-6 bg-slate-50 rounded-t-[2rem]">
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 p-6 rounded-t-[2rem]">
           <div>
             <h2 className="text-2xl font-bold text-[#1a365d]">
               إنشاء شحنة جديدة
             </h2>
+
             <p className="mt-1 text-sm text-slate-500 font-medium">
               سيتم خصم الكميات من المخزن عند تأكيد خروج الشحنة.
             </p>
           </div>
+
           <button
             onClick={closeModal}
             className="rounded-xl p-2.5 bg-white border border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-600 transition shadow-sm"
@@ -283,10 +313,12 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
         >
           <div className="flex-1 overflow-y-auto p-6">
             <div className="grid gap-5 md:grid-cols-2">
+              {/* البراند */}
               <div>
                 <label className="mb-2 block text-sm font-bold text-slate-700">
                   البراند *
                 </label>
+
                 <select
                   name="brand_id"
                   value={formData.brand_id}
@@ -295,6 +327,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                   required
                 >
                   <option value="">اختر البراند</option>
+
                   {brands.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name_ar}
@@ -303,10 +336,12 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                 </select>
               </div>
 
+              {/* العميل */}
               <div>
                 <label className="mb-2 block text-sm font-bold text-slate-700">
                   العميل المستلم *
                 </label>
+
                 <select
                   name="customer_id"
                   value={formData.customer_id}
@@ -316,6 +351,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                   disabled={!formData.brand_id}
                 >
                   <option value="">اختر عميل البراند</option>
+
                   {customers.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -324,9 +360,11 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                 </select>
               </div>
 
+              {/* المنتجات */}
               <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-5">
                 <label className="mb-3 flex items-center gap-2 text-sm font-bold text-[#1a365d]">
-                  <Box size={18} /> إضافة موديلات للشحنة (من الأرصدة المتاحة)
+                  <Box size={18} />
+                  إضافة موديلات للشحنة (من الأرصدة المتاحة)
                 </label>
 
                 <div className="flex flex-col md:flex-row gap-3">
@@ -337,6 +375,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                     disabled={!formData.brand_id || inventoryItems.length === 0}
                   >
                     <option value="">اختر الموديل، اللون، والمقاس...</option>
+
                     {inventoryItems.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.name} (متاح: {item.available})
@@ -360,10 +399,12 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                     disabled={!currentItem}
                     className="flex items-center justify-center gap-2 rounded-xl bg-[#1a365d] px-6 py-3 font-bold text-white transition hover:bg-blue-900 disabled:opacity-50"
                   >
-                    <Plus size={18} /> إضافة
+                    <Plus size={18} />
+                    إضافة
                   </button>
                 </div>
 
+                {/* المنتجات المختارة */}
                 {selectedItems.length > 0 && (
                   <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
                     <table className="w-full text-right text-sm">
@@ -372,21 +413,26 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                           <th className="p-3 font-bold">
                             الموديل واللون والمقاس
                           </th>
+
                           <th className="w-24 p-3 font-bold">الكمية</th>
+
                           <th className="w-16 p-3 text-center font-bold">
                             حذف
                           </th>
                         </tr>
                       </thead>
+
                       <tbody className="divide-y divide-slate-100">
                         {selectedItems.map((item, idx) => (
                           <tr key={idx}>
                             <td className="p-3 font-semibold text-slate-800">
                               {item.name}
                             </td>
+
                             <td className="p-3 font-bold text-[#1a365d]">
                               {item.quantity}
                             </td>
+
                             <td className="p-3 text-center">
                               <button
                                 type="button"
@@ -406,24 +452,12 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                 )}
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-bold text-slate-700">
-                  عدد الكراتين (اختياري)
-                </label>
-                <input
-                  type="number"
-                  name="boxes_count"
-                  value={formData.boxes_count}
-                  onChange={handleChange}
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-[#1a365d]"
-                  placeholder="مثال: 5"
-                />
-              </div>
-
+              {/* شركة الشحن */}
               <div>
                 <label className="mb-2 block text-sm font-bold text-slate-700">
                   شركة الشحن / المندوب
                 </label>
+
                 <input
                   type="text"
                   name="shipping_company"
@@ -434,10 +468,12 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                 />
               </div>
 
+              {/* رقم البوليصة */}
               <div>
                 <label className="mb-2 block text-sm font-bold text-slate-700">
                   رقم البوليصة (AWB)
                 </label>
+
                 <input
                   type="text"
                   name="tracking_number"
@@ -449,10 +485,12 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                 />
               </div>
 
+              {/* الحالة */}
               <div>
                 <label className="mb-2 block text-sm font-bold text-slate-700">
                   حالة الشحنة المبدئية
                 </label>
+
                 <select
                   name="status"
                   value={formData.status}
@@ -460,15 +498,18 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                   className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 font-bold text-[#1a365d] outline-none focus:border-[#1a365d]"
                 >
                   <option value="preparing">جاري التجهيز (خصم وحجز)</option>
+
                   <option value="shipped">
                     خرجت للشحن (تم التسليم لشركة الشحن)
                   </option>
+
                   <option value="delivered">تم التسليم النهائي</option>
                 </select>
               </div>
             </div>
           </div>
 
+          {/* Footer */}
           <div className="flex shrink-0 justify-end gap-3 rounded-b-[2rem] border-t border-slate-200 bg-white p-6">
             <button
               type="button"
@@ -478,6 +519,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
             >
               إلغاء
             </button>
+
             <button
               type="submit"
               disabled={isSubmitting}

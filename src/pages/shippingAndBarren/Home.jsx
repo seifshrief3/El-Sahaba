@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "../../../supabase"; // تأكد من مسار الاستيراد الصحيح
+import { supabase } from "../../../supabase";
 
 const Home = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -7,7 +7,7 @@ const Home = () => {
   // State للإحصائيات
   const [dashboardStats, setDashboardStats] = useState([
     { title: "إجمالي المخزون", value: "0", sub: "قطعة متاحة" },
-    { title: "استلامات اليوم", value: "0", sub: "من قسم التخطيط" },
+    { title: "استلامات اليوم", value: "0", sub: "دفعة من التخطيط" },
     { title: "شحنات قيد التجهيز", value: "0", sub: "بانتظار الخروج" },
     { title: "تم شحنها اليوم", value: "0", sub: "شحنة" },
   ]);
@@ -62,42 +62,53 @@ const Home = () => {
                 ? `جاري تجهيز شحنة للعميل: ${ship.customers?.name || "غير محدد"}`
                 : `تم خروج الشحنة للعميل: ${ship.customers?.name || "غير محدد"}`,
             color: "bg-blue-100 text-blue-700",
-            dateObject: shipDate, // للاستخدام في الترتيب
+            dateObject: shipDate,
             dateDisplay: shipDate.toLocaleDateString("ar-EG"),
           });
         });
 
-        // 4. جلب الاستلامات (أوامر التشغيل المكتملة)
-        const { data: receiptsData } = await supabase
-          .from("production_orders")
+        // 4. جلب الاستلامات من جدول الدفعات (production_deliveries)
+        const { data: receiptsData, error: receiptsError } = await supabase
+          .from("production_deliveries")
           .select(
             `
-            id, updated_at, created_at,
-            collections ( name, brands ( name_ar ) ),
-            production_order_items ( total_quantity )
+            id, updated_at, created_at, delivery_number,
+            production_orders (
+              collections ( name, brands ( name_ar ) )
+            ),
+            production_delivery_items ( delivered_qty )
           `,
           )
           .eq("status", "completed");
 
-        let receiptsTodayCount = 0;
+        if (receiptsError) throw receiptsError;
+
+        let receiptsTodayCount = 0; // هنعد عدد الدفعات اللي استلمناها النهاردة
         const receiptActivities = [];
 
-        receiptsData?.forEach((order) => {
-          // نعتمد على تاريخ التحديث (updated_at) لأنه بيمثل وقت الاستلام الفعلي
-          const ordDate = new Date(order.updated_at || order.created_at);
+        receiptsData?.forEach((delivery) => {
+          // نعتمد على تاريخ التحديث لأنه بيمثل وقت الاستلام الفعلي بالمخزن
+          const ordDate = new Date(delivery.updated_at || delivery.created_at);
           if (ordDate >= today) receiptsTodayCount++;
 
+          // حساب إجمالي القطع في الدفعة دي
           const totalQty =
-            order.production_order_items?.reduce(
-              (s, i) => s + (i.total_quantity || 0),
+            delivery.production_delivery_items?.reduce(
+              (sum, item) => sum + (item.delivered_qty || 0),
               0,
             ) || 0;
 
+          const collectionName =
+            delivery.production_orders?.collections?.name || "غير محدد";
+          const brandName =
+            delivery.production_orders?.collections?.brands?.name_ar ||
+            "غير محدد";
+
           receiptActivities.push({
             type: "استلام",
-            brand: order.collections?.brands?.name_ar || "غير محدد",
-            collection: order.collections?.name || "غير محدد",
-            details: `تم استلام ${totalQty} قطعة من التخطيط`,
+            brand: brandName,
+            collection: `دفعة (${delivery.delivery_number}) - ${collectionName}`,
+            details: `تم استلام ${totalQty} قطعة من التخطيط ودخولها المخزن.`,
             color: "bg-emerald-100 text-emerald-700",
             dateObject: ordDate,
             dateDisplay: ordDate.toLocaleDateString("ar-EG"),
@@ -119,7 +130,7 @@ const Home = () => {
           {
             title: "استلامات اليوم",
             value: receiptsTodayCount.toString(),
-            sub: "من قسم التخطيط",
+            sub: "دفعة من التخطيط",
           },
           {
             title: "شحنات قيد التجهيز",
@@ -132,6 +143,7 @@ const Home = () => {
             sub: "شحنة",
           },
         ]);
+
         setRecentActivities(allActivities);
       } catch (error) {
         console.error("Error loading dashboard data:", error);
@@ -164,7 +176,7 @@ const Home = () => {
           لوحة الشحن والمخزون
         </h1>
         <p className="mt-2 text-sm text-slate-500">
-          نظرة عامة على المخزون، الاستلامات، والشحنات.
+          نظرة عامة على المخزون، الاستلامات بالدفعات، والشحنات.
         </p>
       </section>
 

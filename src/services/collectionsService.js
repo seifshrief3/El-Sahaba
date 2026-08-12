@@ -164,7 +164,6 @@ export const handleIssueOrderToPlanning = async (
           fallbackIndex
         );
       }
-
       return fallbackIndex;
     };
 
@@ -172,7 +171,6 @@ export const handleIssueOrderToPlanning = async (
       if (!component || typeof component !== "object") {
         return "";
       }
-
       return (
         component.part ??
         component.part_name ??
@@ -186,11 +184,9 @@ export const handleIssueOrderToPlanning = async (
       if (typeof component === "string") {
         return component;
       }
-
       if (!component || typeof component !== "object") {
         return "";
       }
-
       return (
         component.color ??
         component.colors ??
@@ -202,30 +198,25 @@ export const handleIssueOrderToPlanning = async (
 
     // ============================================================
     // 2. تجهيز Variants لكل موديل
-    //
-    // كل Variant عبارة عن مجموعة Components.
-    //
-    // مثال:
-    //
-    // Variant 1:
-    //   تيشيرت / بينك
-    //   بنطلون / أسود
-    //
-    // Variant 2:
-    //   تيشيرت / رمادي
-    //   بنطلون / أبيض
     // ============================================================
 
     const preparedModels = collectionInfo.models.map((model) => {
-      const components = Array.isArray(model.colors)
-        ? model.colors
-        : [];
+      // 💡 التعديل هنا: لو الداتا جاية بالهيكل الجديد (Variants جاهزة) نستخدمها مباشرة
+      if (Array.isArray(model.variants) && model.variants.length > 0) {
+        return model;
+      }
+
+      // دعم رجعي للهيكل القديم (لو مفيش Variants بنبنيها إحنا)
+      const components = Array.isArray(model.components)
+        ? model.components
+        : Array.isArray(model.colors)
+          ? model.colors
+          : [];
 
       const variantsMap = new Map();
 
       components.forEach((component, index) => {
         const variantKey = getComponentVariantKey(component, 1);
-
         const part = getComponentPart(component);
         const color = getComponentColor(component);
 
@@ -239,17 +230,16 @@ export const handleIssueOrderToPlanning = async (
 
         variantsMap.get(variantKey).push({
           ...component,
-          variant_key: variantKey,
+          variantKey: variantKey, // توحيد اسم المفتاح
           part,
           color: String(color).trim(),
         });
       });
 
-      // لو مفيش components
       if (variantsMap.size === 0) {
         variantsMap.set(1, [
           {
-            variant_key: 1,
+            variantKey: 1,
             part: "",
             color: "غير محدد",
           },
@@ -269,15 +259,6 @@ export const handleIssueOrderToPlanning = async (
 
     // ============================================================
     // 3. التحقق + حساب إجماليات الـ Variants
-    //
-    // مهم:
-    // هنا بنحسب الكمية مرة واحدة للـ Variant.
-    //
-    // مش:
-    // تيشيرت 10 + بنطلون 10 = 20
-    //
-    // لكن:
-    // Variant = 10 قطعة
     // ============================================================
 
     for (const model of preparedModels) {
@@ -295,10 +276,7 @@ export const handleIssueOrderToPlanning = async (
               .map((component) => {
                 const part = component.part;
                 const color = component.color;
-
-                return part
-                  ? `${part} - ${color}`
-                  : color;
+                return part ? `${part} - ${color}` : color;
               })
               .join(" + ");
 
@@ -390,129 +368,92 @@ export const handleIssueOrderToPlanning = async (
 
     // ============================================================
     // 6. إنشاء Production Order Items
-    //
-    // كل Component له Row مستقل
-    //
-    // لكن Components الخاصة بنفس Variant
-    // تأخذ نفس variant_key
+    // 💡 التعديل: دمج أجزاء الـ Variant في سطر واحد لتجنب تكرار الكميات
     // ============================================================
 
     for (const model of preparedModels) {
       for (const variant of model.variants) {
-        // --------------------------------------------------------
-        // حساب إجمالي الـ Variant مرة واحدة
-        // --------------------------------------------------------
 
         let variantQty = 0;
 
+        // حساب كمية الطقم (الـ Variant) بالكامل
         for (const size of model.sizes) {
           const series =
             Number(
               seriesCounts?.[model.id]?.[variant.variantKey]?.[size]
             ) || 0;
-
           variantQty += series;
         }
 
-        // --------------------------------------------------------
-        // إنشاء Row لكل Component
-        // --------------------------------------------------------
+        // 💡 تجميع أسماء الأجزاء والألوان في نص واحد (مثال: تيشيرت + بنطلون / بينك + كحلي)
+        const combinedParts = variant.components
+          .map((c) => c.part)
+          .filter(Boolean)
+          .join(" + ") || "موديل كامل";
 
-        for (const component of variant.components) {
-          const part = component.part || null;
-          const color = component.color || null;
+        const combinedColors = variant.components
+          .map((c) => c.color)
+          .filter(Boolean)
+          .join(" + ") || "غير محدد";
 
-          const { data: itemData, error: itemError } =
-            await supabase
-              .from("production_order_items")
-              .insert({
-                production_order_id: orderId,
-                model_id: model.real_id || model.id,
+        // تسجيل الـ Variant بالكامل كسطر واحد في الداتابيز
+        const { data: itemData, error: itemError } = await supabase
+          .from("production_order_items")
+          .insert({
+            production_order_id: orderId,
+            model_id: model.real_id || model.id,
+            variant_key: variant.variantKey,
+            selling_price: Number(model.approvedPrice) || 0,
+            total_quantity: variantQty, // 👈 الكمية هتتحط مرة واحدة بس للطقم
+            part: combinedParts,        // 👈 مثال: سويت شيرت + ليجن
+            color: combinedColors,      // 👈 مثال: بينك + كحلي
+            size: null,
+            quantity: null,
+          })
+          .select()
+          .single();
 
-                // نفس الـ Variant لكل أجزاء التركيبة
-                variant_key: variant.variantKey,
+        if (itemError) {
+          throw itemError;
+        }
 
-                // السعر الخاص بالموديل
-                selling_price:
-                  Number(model.approvedPrice) || 0,
+        const itemId = itemData.id;
 
-                // كمية هذا الـ Component
-                // وهي نفس كمية الـ Variant
-                total_quantity: variantQty,
+        // ======================================================
+        // 7. حفظ المقاسات للـ Variant المدمج
+        // ======================================================
 
-                part,
-                color,
+        const sizesData = model.sizes.map((sizeName) => {
+          const matchedSize = dbSizes.find(
+            (dbSize) =>
+              String(dbSize.name).trim().toLowerCase() ===
+              String(sizeName).trim().toLowerCase()
+          );
 
-                // الأعمدة القديمة غير المستخدمة في الـ structure الجديدة
-                size: null,
-                quantity: null,
-              })
-              .select()
-              .single();
-
-          if (itemError) {
-            throw itemError;
-          }
-
-          const itemId = itemData.id;
-
-          // ======================================================
-          // 7. حفظ المقاسات
-          //
-          // نفس كميات الـ Variant لكل Component
-          //
-          // مثال:
-          //
-          // Variant = تيشيرت + بنطلون
-          //
-          // S = 10
-          //
-          // يتسجل:
-          //
-          // تيشيرت → S = 10
-          // بنطلون → S = 10
-          //
-          // لكن production_orders.total_quantity = 10 فقط
-          // ======================================================
-
-          const sizesData = model.sizes.map((sizeName) => {
-            const matchedSize = dbSizes.find(
-              (dbSize) =>
-                String(dbSize.name)
-                  .trim()
-                  .toLowerCase() ===
-                String(sizeName)
-                  .trim()
-                  .toLowerCase()
+          if (!matchedSize) {
+            throw new Error(
+              `المقاس "${sizeName}" غير مسجل في جدول المقاسات.`
             );
-
-            if (!matchedSize) {
-              throw new Error(
-                `المقاس "${sizeName}" غير مسجل في جدول المقاسات.`
-              );
-            }
-
-            const quantity =
-              Number(
-                seriesCounts?.[model.id]?.[
-                variant.variantKey
-                ]?.[sizeName]
-              ) || 0;
-
-            return {
-              production_order_item_id: itemId,
-              size_id: matchedSize.id,
-              quantity,
-            };
-          });
-
-          const { error: sizesError } = await supabase
-            .from("production_order_item_sizes")
-            .insert(sizesData);
-
-          if (sizesError) {
-            throw sizesError;
           }
+
+          const quantity =
+            Number(
+              seriesCounts?.[model.id]?.[variant.variantKey]?.[sizeName]
+            ) || 0;
+
+          return {
+            production_order_item_id: itemId,
+            size_id: matchedSize.id,
+            quantity,
+          };
+        });
+
+        const { error: sizesError } = await supabase
+          .from("production_order_item_sizes")
+          .insert(sizesData);
+
+        if (sizesError) {
+          throw sizesError;
         }
       }
     }
@@ -544,11 +485,7 @@ export const handleIssueOrderToPlanning = async (
       totalAmount: grandTotalAmount,
     };
   } catch (error) {
-    console.error(
-      "Error issuing order to planning:",
-      error
-    );
-
+    console.error("Error issuing order to planning:", error);
     throw error;
   }
 };

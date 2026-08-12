@@ -593,16 +593,6 @@ const StartOrder = () => {
           models: formattedModels,
         };
 
-        console.log("FINAL COLLECTION DATA:", formattedData);
-
-        formattedData.models.forEach((model) => {
-          console.log("MODEL:", model.name);
-
-          console.log("VARIANTS:", model.variants);
-
-          console.log("SIZES:", model.sizes);
-        });
-
         setCollectionInfo(formattedData);
 
         /* ======================================================

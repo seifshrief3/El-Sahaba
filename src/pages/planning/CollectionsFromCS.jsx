@@ -1,19 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../../supabase";
-import { toast } from "sonner";
-import { notificationService } from "../../services/notificationService";
 
 const CollectionsFromCS = () => {
   const [collectionsData, setCollectionsData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState("الكل");
-  const [isDelivering, setIsDelivering] = useState(false);
-
-  // 💡 States الخاصة بنافذة إدخال عدد الكراتين
-  const [showCartonModal, setShowCartonModal] = useState(false);
-  const [selectedColForDelivery, setSelectedColForDelivery] = useState(null);
-  const [cartonsCount, setCartonsCount] = useState("");
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchInProgressOrders = async () => {
@@ -56,7 +49,6 @@ const CollectionsFromCS = () => {
         const formattedData = orders.map((order) => {
           let nextStageName = "استلام الخامات";
           let currentStatus = "يسير حسب الخطة";
-          let isReadyForDelivery = false;
 
           if (stages.length > 0) {
             const nextStage = stages.find((stage) => {
@@ -70,10 +62,8 @@ const CollectionsFromCS = () => {
 
             if (nextStage) {
               nextStageName = nextStage.name;
-              isReadyForDelivery = false;
             } else {
               nextStageName = "جاهز للتسليم 📦";
-              isReadyForDelivery = true;
             }
           }
 
@@ -86,7 +76,6 @@ const CollectionsFromCS = () => {
             nextStage: nextStageName,
             deliveryDate: order.collections?.delivery_date || "غير محدد",
             status: currentStatus,
-            isReadyForDelivery,
           };
         });
 
@@ -100,54 +89,6 @@ const CollectionsFromCS = () => {
 
     fetchInProgressOrders();
   }, []);
-
-  // 💡 1. دالة فتح النافذة لما يدوس تسليم
-  const handleOpenDeliveryModal = (col) => {
-    setSelectedColForDelivery(col);
-    setCartonsCount(""); // تصفير الحقل
-    setShowCartonModal(true);
-  };
-
-  // 💡 2. دالة تأكيد التسليم بعد كتابة عدد الكراتين
-  const confirmDeliveryToWarehouse = async () => {
-    if (!cartonsCount || isNaN(cartonsCount) || Number(cartonsCount) <= 0) {
-      toast.error("برجاء إدخال عدد كراتين صحيح وموجب.");
-      return;
-    }
-
-    setIsDelivering(true);
-    try {
-      // تغيير الحالة وتحديث عدد الكراتين
-      const { error } = await supabase
-        .from("production_orders")
-        .update({
-          status: "pending_warehouse_receipt",
-          cartons_count: Number(cartonsCount), // 💡 حفظ عدد الكراتين
-        })
-        .eq("id", selectedColForDelivery.db_id);
-
-      if (error) throw error;
-
-      // إرسال الإشعار للمخزن وفيه عدد الكراتين
-      await notificationService.sendNotification(
-        "inventory",
-        "كولكشن جاهز للاستلام 📦",
-        `قسم التخطيط انتهى من ${selectedColForDelivery.collectionName} وتمت التعبئة في (${cartonsCount} كرتونة)، في انتظار استلامكم.`,
-        selectedColForDelivery.collection_id,
-      );
-
-      toast.success("تم إرسال الكولكشن للمخزن بنجاح!");
-      setCollectionsData((prev) =>
-        prev.filter((item) => item.db_id !== selectedColForDelivery.db_id),
-      );
-      setShowCartonModal(false);
-    } catch (error) {
-      console.error("Error delivering to warehouse:", error);
-      toast.error("حدث خطأ أثناء إرسال الكولكشن للمخزن.");
-    } finally {
-      setIsDelivering(false);
-    }
-  };
 
   const filteredCollections = collectionsData.filter((col) => {
     if (filter === "الكل") return true;
@@ -248,86 +189,12 @@ const CollectionsFromCS = () => {
                   >
                     فتح وتحديث المراحل ◀
                   </Link>
-
-                  {/* 💡 تعديل الزرار ليفتح الـ Popup */}
-                  <button
-                    onClick={() => handleOpenDeliveryModal(col)}
-                    disabled={!col.isReadyForDelivery}
-                    className={`w-full py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2 mt-2 ${
-                      col.isReadyForDelivery
-                        ? "bg-red-800 cursor-pointer text-white hover:bg-red-900 shadow-sm"
-                        : "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300"
-                    }`}
-                  >
-                    تسليم الكولكشن للمخزن ◀
-                  </button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
-
-      {/* ======================= */}
-      {/* 💡 نافذة إدخال عدد الكراتين */}
-      {/* ======================= */}
-      {showCartonModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl animate-fade-in-up">
-            <h2 className="text-xl font-bold text-[#1a365d] mb-2">
-              تسليم الكولكشن للمخزن
-            </h2>
-            <p className="text-sm text-slate-500 mb-6">
-              أنت على وشك تسليم كولكشن{" "}
-              <strong className="text-slate-800">
-                {selectedColForDelivery?.collectionName}
-              </strong>{" "}
-              إلى قسم المخازن. برجاء إدخال عدد الكراتين الفعلي.
-            </p>
-
-            <div className="mb-6">
-              <label className="block text-sm font-bold text-slate-700 mb-2">
-                إجمالي عدد الكراتين:
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={cartonsCount}
-                onChange={(e) => setCartonsCount(e.target.value)}
-                placeholder="مثال: 15"
-                className="w-full border border-slate-300 rounded-lg p-3 outline-none focus:border-[#1a365d] text-lg font-bold"
-                autoFocus
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={confirmDeliveryToWarehouse}
-                disabled={isDelivering || !cartonsCount}
-                className="flex-1 bg-red-800 text-white font-bold py-3 rounded-lg hover:bg-red-900 transition disabled:opacity-50"
-              >
-                {isDelivering ? "جاري الإرسال..." : "تأكيد وإرسال للمخزن"}
-              </button>
-              <button
-                onClick={() => setShowCartonModal(false)}
-                disabled={isDelivering}
-                className="flex-1 bg-slate-100 text-slate-700 font-bold py-3 rounded-lg hover:bg-slate-200 transition"
-              >
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in-up { animation: fadeInUp 0.2s ease-out forwards; }
-      `,
-        }}
-      />
     </div>
   );
 };

@@ -15,54 +15,55 @@ const TechPackTemplate = React.forwardRef(
         try {
           return Object.values(value)
             .map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v)))
-            .join(" | "); // بيفصل بين القيم بعلامة | عشان يكون شكلها شيك في الطباعة
+            .join(" | ");
         } catch (e) {
           return JSON.stringify(value);
         }
       }
       return String(value);
     };
-    const renderFabricNames = (fabrics) => {
-      if (!Array.isArray(fabrics) || fabrics.length === 0) {
-        return "---";
-      }
 
-      return fabrics
-        .map((fabric) => {
-          if (typeof fabric === "string") {
-            return fabric;
-          }
+    // 💡 تعديل ليدعم النصوص المباشرة بجانب المصفوفات
+    const renderFabricNames = (fabricData) => {
+      if (!fabricData) return "---";
 
-          if (fabric && typeof fabric === "object") {
-            return fabric.name || "";
-          }
+      // لو الخامة جاية كنص مباشر
+      if (typeof fabricData === "string") return fabricData;
 
-          return "";
-        })
-        .filter(Boolean)
-        .join(" | ");
-    };
-
-    const renderFabricWeights = (fabrics) => {
-      if (!Array.isArray(fabrics) || fabrics.length === 0) {
-        return "---";
-      }
-
-      return fabrics
-        .map((fabric) => {
-          if (typeof fabric === "string") {
+      // لو الخامة جاية كمصفوفة
+      if (Array.isArray(fabricData)) {
+        return fabricData
+          .map((fabric) => {
+            if (typeof fabric === "string") return fabric;
+            if (fabric && typeof fabric === "object") return fabric.name || "";
             return "";
-          }
-
-          if (fabric && typeof fabric === "object") {
-            return fabric.weight || "";
-          }
-
-          return "";
-        })
-        .filter(Boolean)
-        .join(" | ");
+          })
+          .filter(Boolean)
+          .join(" | ");
+      }
+      return "---";
     };
+
+    // 💡 تعديل ليدعم استلام الوزن بشكل صريح من الـ AI
+    const renderFabricWeights = (fabricData, weightData) => {
+      // الأولوية لوزن الخامة لو مبعوت بشكل منفصل وصريح
+      if (weightData && typeof weightData === "string") return weightData;
+
+      // كبديل، نحاول نستخرجه من مصفوفة الخامات القديمة لو موجودة
+      if (Array.isArray(fabricData)) {
+        const weights = fabricData
+          .map((fabric) => {
+            if (fabric && typeof fabric === "object")
+              return fabric.weight || "";
+            return "";
+          })
+          .filter(Boolean);
+
+        if (weights.length > 0) return weights.join(" | ");
+      }
+      return "---";
+    };
+
     const styles = {
       // إعدادات الصفحة المطاطية لضمان احتواء كامل على صفحة A4 واحدة
       page: {
@@ -418,11 +419,14 @@ const TechPackTemplate = React.forwardRef(
                       {renderFabricNames(data?.basic_info?.main_fabric)}
                     </td>
                   </tr>
-
                   <tr>
                     <th style={styles.th}>وزن الخامة</th>
                     <td style={styles.td}>
-                      {renderFabricWeights(data?.basic_info?.main_fabric)}
+                      {/* 💡 تم تمرير نوع الخامة ووزن الخامة معاً لضمان الاستخراج الصحيح */}
+                      {renderFabricWeights(
+                        data?.basic_info?.main_fabric,
+                        data?.basic_info?.fabric_weight,
+                      )}
                     </td>
                   </tr>
                   <tr>
@@ -528,7 +532,10 @@ const TechPackTemplate = React.forwardRef(
                           </span>
                         )}
                       </div>
-                      <div style={styles.closeUpLabel}>{safeRender(label)}</div>
+                      {/* 💡 يعرض الوصف فقط لو الصورة موجودة */}
+                      <div style={styles.closeUpLabel}>
+                        {imgSrc ? safeRender(label) : "---"}
+                      </div>
                     </div>
                   );
                 })}
@@ -694,7 +701,6 @@ const TechPackTemplate = React.forwardRef(
                   flex: 1,
                 }}
               >
-                {/* 💡 أمان 100% لعرض الملاحظات الفنية */}
                 {safeRender(data?.technical_comments)}
               </div>
             </div>
@@ -733,7 +739,6 @@ const TechPackTemplate = React.forwardRef(
                     textAlign: "right",
                   }}
                 >
-                  {/* 💡 أمان لمعالجة مصفوفة الجودة */}
                   {Array.isArray(data?.quality_check_points) ? (
                     data.quality_check_points.slice(0, 3).map((pt, i) => (
                       <li key={i} style={{ marginBottom: "2px" }}>

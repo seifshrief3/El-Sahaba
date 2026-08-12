@@ -112,144 +112,177 @@ const Navbar = ({ toggleSidebar }) => {
   };
 
   // ==========================================
-  // 💡 الأكشن الخاص بقسم المخزن (استلام كولكشن من التخطيط)
+  // 💡 الأكشن الخاص بقسم المخزن (النسخة السريعة 🚀)
   // ==========================================
   const handleReceiveInWarehouse = async (notif) => {
     if (!notif.reference_id) return;
     setIsProcessing(true);
 
     try {
-      // 1. جلب بيانات الأوردر وعناصره مع جدول المقاسات
-      const { data: order, error: fetchError } = await supabase
+      const { data: orderData, error: orderError } = await supabase
         .from("production_orders")
-        .select(
-          `
-          id, 
-          cartons_count, 
-          production_order_items (
-            model_id, color, total_quantity, quantity,
-            production_order_item_sizes (size_id, quantity)
-          ), 
-          collections (name)
-        `,
-        )
+        .select("id")
         .eq("collection_id", notif.reference_id)
         .single();
 
+      if (orderError) throw orderError;
+
+      const { data: activeDeliveries, error: fetchError } = await supabase
+        .from("production_deliveries")
+        .select(
+          `
+          id,
+          delivery_number,
+          production_delivery_items (
+            delivered_qty,
+            production_order_item_sizes (
+              sizes (name),
+              production_order_items (
+                model_id,
+                color
+              )
+            )
+          )
+        `,
+        )
+        .eq("status", "pending")
+        .eq("production_order_id", orderData.id);
+
       if (fetchError) throw fetchError;
 
-      let totalItemsInserted = 0; // عشان نعد إحنا ضفنا كام قطعة فعلاً
+      if (!activeDeliveries || activeDeliveries.length === 0) {
+        toast.info("لا توجد دفعات معلقة للاستلام لهذا الأمر.");
+        setIsProcessing(false);
+        return;
+      }
 
-      // 2. تحديث أرصدة المخزن بشكل صحيح (تراكمي) مفصلة بالمقاسات
-      if (
-        order.production_order_items &&
-        order.production_order_items.length > 0
-      ) {
-        for (const item of order.production_order_items) {
-          const itemColor = item.color || "غير محدد";
+      let totalItemsInserted = 0;
 
-          // تجهيز قائمة المقاسات بدقة
-          const sizesList =
-            item.production_order_item_sizes &&
-            item.production_order_item_sizes.length > 0
-              ? item.production_order_item_sizes
-              : [
-                  {
-                    size_id: "غير محدد",
-                    quantity: item.total_quantity || item.quantity || 0,
-                  },
-                ];
+      // مصفوفات لتجميع العمليات عشان ننفذها بالتوازي
+      const inventoryUpdatePromises = [];
+      const inventoryInsertPayloads = [];
+      const deliveryUpdatePromises = [];
 
-          for (const sizeObj of sizesList) {
-            const currentSize = sizeObj.size_id || "غير محدد";
-            const currentQty = sizeObj.quantity || 0;
+      for (const delivery of activeDeliveries) {
+        for (const item of delivery.production_delivery_items) {
+          const qty = item.delivered_qty || 0;
+          if (qty <= 0) continue;
 
-            if (currentQty === 0) continue; // لو الكمية صفر مش هنضيفها
+          const modelId =
+            item.production_order_item_sizes?.production_order_items?.model_id;
+          const color =
+            item.production_order_item_sizes?.production_order_items?.color ||
+            "غير محدد";
+          const sizeName =
+            item.production_order_item_sizes?.sizes?.name || "غير محدد";
 
-            totalItemsInserted += 1;
+          if (!modelId) continue;
+          totalItemsInserted += qty;
 
-            const { data: existingInv, error: searchError } = await supabase
-              .from("inventory")
-              .select("id, received_qty, available_qty")
-              .eq("model_id", item.model_id)
-              .eq("color", itemColor)
-              .eq("size", currentSize)
-              .maybeSingle();
+          // البحث في المخزن
+          const { data: existingInv, error: searchError } = await supabase
+            .from("inventory")
+            .select("id, received_qty, available_qty")
+            .eq("model_id", modelId)
+            .eq("color", color)
+            .eq("size", sizeName)
+            .maybeSingle();
 
-            if (searchError) throw searchError;
+          if (searchError) throw searchError;
 
-            if (existingInv) {
-              // 🚨 قفشنا الإيرور بتاع التحديث لو حصل
-              const { error: updateInvError } = await supabase
+          if (existingInv) {
+            // تحديث الرصيد (نضيفه للـ Promises)
+            inventoryUpdatePromises.push(
+              supabase
                 .from("inventory")
                 .update({
-                  received_qty: (existingInv.received_qty || 0) + currentQty,
-                  available_qty: (existingInv.available_qty || 0) + currentQty,
+                  received_qty: (existingInv.received_qty || 0) + qty,
+                  available_qty: (existingInv.available_qty || 0) + qty,
                   last_updated: new Date().toISOString(),
                 })
-                .eq("id", existingInv.id);
-
-              if (updateInvError) throw updateInvError;
-            } else {
-              // 🚨 قفشنا الإيرور بتاع الإضافة لو حصل
-              const { error: insertInvError } = await supabase
-                .from("inventory")
-                .insert({
-                  production_order_id: order.id,
-                  model_id: item.model_id,
-                  color: itemColor,
-                  size: currentSize,
-                  received_qty: currentQty,
-                  available_qty: currentQty,
-                  reserved_qty: 0,
-                  shipped_qty: 0,
-                });
-
-              if (insertInvError) throw insertInvError;
-            }
+                .eq("id", existingInv.id),
+            );
+          } else {
+            // إضافة رصيد جديد (نجمعه عشان نعمل Bulk Insert)
+            inventoryInsertPayloads.push({
+              production_order_id: orderData.id,
+              model_id: modelId,
+              color: color,
+              size: sizeName,
+              received_qty: qty,
+              available_qty: qty,
+              reserved_qty: 0,
+              shipped_qty: 0,
+            });
           }
         }
-      }
 
-      // لو اللوب خلصت ومفيش ولا قطعة اتضافت (لأن الكميات كلها جاية 0 من الداتابيز)
-      if (totalItemsInserted === 0) {
-        toast.error(
-          "لم يتم إضافة أي منتج للمخزن! كميات هذا الأوردر مسجلة بـ (0)",
+        // 3. تحديث حالة الدفعة لـ completed (نضيفه للـ Promises)
+        deliveryUpdatePromises.push(
+          supabase
+            .from("production_deliveries")
+            .update({ status: "completed" })
+            .eq("id", delivery.id),
         );
-        setIsProcessing(false);
-        return; // نوقف الكود وميحدثش حالة الأوردر
       }
 
-      // 3. تحديث حالة الأوردر لـ "مكتمل"
-      const { error: updateError } = await supabase
-        .from("production_orders")
-        .update({ status: "completed" })
-        .eq("id", order.id);
+      if (totalItemsInserted === 0) {
+        toast.error("لم يتم إضافة أي منتج للمخزن (الكميات في الدفعة = 0)");
+        setIsProcessing(false);
+        return;
+      }
 
-      if (updateError) throw updateError;
+      // 🚀 تنفيذ كل التحديثات والإضافات في نفس اللحظة!
+      const allPromises = [
+        ...inventoryUpdatePromises,
+        ...deliveryUpdatePromises,
+      ];
 
-      // 4. إرسال الإشعار
-      await notificationService.sendNotification(
-        "planning",
-        "تم استلام البضاعة 📦✅",
-        `قسم المخازن استلم كولكشن (${order.collections?.name || ""}) وتمت إضافته لأرصدة الجرد.`,
-        notif.reference_id,
+      // لو فيه داتا جديدة هتتضاف، نبعتها Bulk Insert (طلبية واحدة سريعة جداً)
+      if (inventoryInsertPayloads.length > 0) {
+        allPromises.push(
+          supabase.from("inventory").insert(inventoryInsertPayloads),
+        );
+      }
+
+      // نستنى كل حاجة تخلص مرة واحدة
+      await Promise.all(allPromises);
+
+      // 4. التحقق هل الأوردر خلص؟
+      const { data: sizesCheck } = await supabase
+        .from("production_order_item_sizes")
+        .select("remaining_qty")
+        .in(
+          "production_order_item_id",
+          (
+            await supabase
+              .from("production_order_items")
+              .select("id")
+              .eq("production_order_id", orderData.id)
+          ).data.map((i) => i.id),
+        );
+
+      const isOrderFullyDelivered = sizesCheck?.every(
+        (s) => s.remaining_qty <= 0,
       );
 
-      // 5. تحديد الإشعار كمقروء
+      if (isOrderFullyDelivered) {
+        await supabase
+          .from("production_orders")
+          .update({ status: "completed" })
+          .eq("id", orderData.id);
+      }
+
       if (typeof handleNotificationClick === "function") {
         await handleNotificationClick(notif);
       } else if (typeof handleMarkAsRead === "function") {
         await handleMarkAsRead(notif.id);
       }
 
-      toast.success("تم الاستلام وإضافة الكميات للمخزن بنجاح!");
+      toast.success(`تم استلام البضاعة (${totalItemsInserted} قطعة) بنجاح!`);
     } catch (error) {
-      // 🚨 هنا هيطبعلك سبب الفشل الحقيقي في الكونسول ويوضحهولك
       console.error("🚨 إيرور الاستلام الحقيقي:", error);
-      toast.error(
-        `فشل الإضافة: ${error.message || "تأكد من أعمدة جدول inventory"}`,
-      );
+      toast.error(`فشل الإضافة: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }
@@ -356,17 +389,14 @@ const Navbar = ({ toggleSidebar }) => {
                               </button>
                             )}
 
-                          {/* 💡 زرار المخزن */}
                           {userDepartment === "inventory" &&
                             notif.reference_id &&
-                            notif.title.includes("جاهز للاستلام") && (
+                            (notif.title.includes("جاهز للاستلام") ||
+                              notif.title.includes("دفعة جديدة")) && (
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleReceiveInWarehouse(notif);
-                                }}
+                                onClick={() => handleReceiveInWarehouse(notif)}
                                 disabled={isProcessing}
-                                className="bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded text-xs font-bold transition disabled:opacity-50"
+                                className="flex-1 sm:flex-none bg-emerald-600 text-white hover:bg-emerald-700 px-6 py-2.5 rounded-lg text-sm font-bold transition disabled:opacity-50 shadow-sm"
                               >
                                 استلام البضاعة 📦
                               </button>

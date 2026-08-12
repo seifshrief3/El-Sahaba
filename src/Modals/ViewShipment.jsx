@@ -71,25 +71,24 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
         .from("shipments")
         .select(
           `
-          id,
-          shipment_number,
-          status,
-          boxes_count,
-          shipping_company,
-          tracking_number,
-          created_at,
-          customers ( name, phone, governorate, address ),
-          brands ( name_ar ),
-          shipment_items (
-            quantity,
-            inventory_id,
-            inventory (
-              size,
-              color,
-              models (name)
-            )
-          )
-        `,
+  id,
+  shipment_number,
+  status,
+  shipping_company,
+  tracking_number,
+  created_at,
+  customers ( name, phone, governorate, address ),
+  brands ( name_ar ),
+  shipment_items (
+    quantity,
+    inventory_id,
+    inventory (
+      size,
+      color,
+      models (name)
+    )
+  )
+`,
         )
         .eq("id", shipment.db_id)
         .single();
@@ -244,14 +243,6 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
                   </p>
                   <p className="font-bold text-slate-800">
                     {shipmentDetails?.shipping_company || "غير محدد"}
-                  </p>
-                </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                  <p className="text-xs text-slate-400 font-bold mb-1">
-                    عدد الكراتين
-                  </p>
-                  <p className="font-bold text-slate-800">
-                    {shipmentDetails?.boxes_count || 0} كرتونة
                   </p>
                 </div>
 
@@ -468,12 +459,6 @@ const PrintableShipmentReceipt = forwardRef(({ shipment, logo }, ref) => {
             شركة الشحن:{" "}
             <span className="font-bold text-slate-900">
               {shipment.shipping_company || "غير محدد"}
-            </span>
-          </p>
-          <p className="text-slate-700 mt-1">
-            عدد الكراتين:{" "}
-            <span className="font-bold text-slate-900">
-              {shipment.boxes_count || 0} كرتونة
             </span>
           </p>
           <p className="text-slate-700 mt-1">
