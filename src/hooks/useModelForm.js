@@ -12,6 +12,9 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
   // ==========================================
 
   const [modelName, setModelName] = useState(activeModel?.name || "");
+  const [modelNumber, setModelNumber] = useState(
+    activeModel?.model_number || ""
+  );
   const [notes, setNotes] = useState(activeModel?.customer_notes || "");
 
   // Main image
@@ -85,6 +88,7 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
 
   useEffect(() => {
     setModelName(activeModel?.name || "");
+    setModelNumber(activeModel?.model_number || "");
     setNotes(activeModel?.customer_notes || "");
 
     // Main image
@@ -109,9 +113,6 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
 
     if (activeModel?.colors?.length > 0) {
       parsedColors = activeModel.colors.map((item) => {
-        // Old format:
-        // ["أبيض", "أسود"]
-
         if (typeof item === "string") {
           return {
             variant: 1,
@@ -192,28 +193,18 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
 
     let finalParsedSizes = [];
 
-    // 1. description
     if (parsedSizesFromDesc.length > 0) {
       finalParsedSizes = parsedSizesFromDesc;
-    }
-
-    // 2. model_sizes relation
-    else if (
+    } else if (
       activeModel?.model_sizes &&
       activeModel.model_sizes.length > 0
     ) {
       finalParsedSizes = activeModel.model_sizes
         .map((item) => item?.sizes?.name)
         .filter(Boolean);
-    }
-
-    // 3. sizes
-    else if (activeModel?.sizes?.length > 0) {
+    } else if (activeModel?.sizes?.length > 0) {
       finalParsedSizes = activeModel.sizes;
-    }
-
-    // 4. selectedSizes
-    else if (activeModel?.selectedSizes?.length > 0) {
+    } else if (activeModel?.selectedSizes?.length > 0) {
       finalParsedSizes = activeModel.selectedSizes;
     }
 
@@ -252,8 +243,6 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
       ...newPreviews,
     ]);
 
-    // مهم جدًا:
-    // يسمح باختيار نفس الصورة مرة أخرى
     e.target.value = "";
   };
 
@@ -262,10 +251,7 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
 
     if (!preview) return;
 
-    // ==========================================
     // Existing Cloudinary URL
-    // ==========================================
-
     if (
       typeof preview === "string" &&
       preview.startsWith("http")
@@ -277,11 +263,7 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
       return;
     }
 
-    // ==========================================
     // New local image
-    // ==========================================
-
-    // نحدد كل الصور المحلية قبل الصورة الحالية
     const localImagesBeforeCurrent =
       closeUpPreviews
         .slice(0, index)
@@ -297,7 +279,6 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
       prev.filter((_, i) => i !== fileIndex)
     );
 
-    // إلغاء الـ object URL
     try {
       URL.revokeObjectURL(preview);
     } catch (error) {
@@ -407,7 +388,6 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
 
     if (!file) return;
 
-    // تنظيف الـ preview القديم لو كان local
     if (
       imagePreview &&
       typeof imagePreview === "string" &&
@@ -421,18 +401,224 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
 
-    // يسمح باختيار نفس الصورة مرة أخرى
     e.target.value = "";
   };
 
   // ==========================================
-  // 9. Cloudinary upload
+  // 9. Image compression
+  // ==========================================
+
+  const compressImage = (
+    file,
+    {
+      maxSizeMB = 8,
+      maxWidthOrHeight = 3000,
+      quality = 0.85,
+    } = {}
+  ) => {
+    return new Promise((resolve, reject) => {
+      if (!file) {
+        reject(new Error("لم يتم اختيار ملف"));
+        return;
+      }
+
+      // لو الصورة بالفعل أقل من الحد المطلوب
+      if (file.size <= maxSizeMB * 1024 * 1024) {
+        resolve(file);
+        return;
+      }
+
+      const img = new Image();
+
+      const objectUrl = URL.createObjectURL(file);
+
+      img.onload = () => {
+        try {
+          URL.revokeObjectURL(objectUrl);
+
+          let width = img.width;
+          let height = img.height;
+
+          // تصغير الأبعاد مع الحفاظ على النسبة
+          if (
+            width > maxWidthOrHeight ||
+            height > maxWidthOrHeight
+          ) {
+            const scale = Math.min(
+              maxWidthOrHeight / width,
+              maxWidthOrHeight / height
+            );
+
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+          }
+
+          const canvas = document.createElement("canvas");
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext("2d");
+
+          if (!ctx) {
+            reject(
+              new Error(
+                "تعذر إنشاء Canvas لضغط الصورة"
+              )
+            );
+            return;
+          }
+
+          ctx.drawImage(
+            img,
+            0,
+            0,
+            width,
+            height
+          );
+
+          const convertToBlob = (currentQuality) => {
+            canvas.toBlob(
+              (blob) => {
+                if (!blob) {
+                  reject(
+                    new Error(
+                      "تعذر ضغط الصورة"
+                    )
+                  );
+                  return;
+                }
+
+                // لو الحجم أصبح مناسب
+                if (
+                  blob.size <=
+                  maxSizeMB * 1024 * 1024
+                ) {
+                  const compressedFile =
+                    new File(
+                      [blob],
+                      file.name.replace(
+                        /\.[^/.]+$/,
+                        ".jpg"
+                      ),
+                      {
+                        type: "image/jpeg",
+                        lastModified:
+                          Date.now(),
+                      }
+                    );
+
+                  resolve(compressedFile);
+                  return;
+                }
+
+                // نقلل الجودة تدريجيًا
+                if (currentQuality > 0.4) {
+                  convertToBlob(
+                    currentQuality - 0.1
+                  );
+                  return;
+                }
+
+                // لو لسه كبير، نقلل الأبعاد
+                const newWidth = Math.round(
+                  canvas.width * 0.8
+                );
+
+                const newHeight = Math.round(
+                  canvas.height * 0.8
+                );
+
+                canvas.width = newWidth;
+                canvas.height = newHeight;
+
+                const newCtx =
+                  canvas.getContext("2d");
+
+                newCtx.drawImage(
+                  img,
+                  0,
+                  0,
+                  newWidth,
+                  newHeight
+                );
+
+                convertToBlob(0.8);
+              },
+              "image/jpeg",
+              currentQuality
+            );
+          };
+
+          convertToBlob(quality);
+        } catch (error) {
+          URL.revokeObjectURL(objectUrl);
+          reject(error);
+        }
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+
+        reject(
+          new Error(
+            "تعذر قراءة الصورة لضغطها"
+          )
+        );
+      };
+
+      img.src = objectUrl;
+    });
+  };
+
+  // ==========================================
+  // 10. Cloudinary upload
   // ==========================================
 
   const uploadToCloudinary = async (file) => {
+    if (!file) {
+      throw new Error("لم يتم اختيار ملف");
+    }
+
+    console.log(
+      "========== CLOUDINARY UPLOAD =========="
+    );
+
+    console.log("Original file:", {
+      name: file.name,
+      type: file.type,
+      sizeMB: (
+        file.size /
+        1024 /
+        1024
+      ).toFixed(2),
+    });
+
+    // ضغط الصورة فقط إذا كانت أكبر من 8MB
+    const compressedFile =
+      await compressImage(file, {
+        maxSizeMB: 8,
+        maxWidthOrHeight: 3000,
+        quality: 0.85,
+      });
+
+    console.log("File after compression:", {
+      name: compressedFile.name,
+      type: compressedFile.type,
+      sizeMB: (
+        compressedFile.size /
+        1024 /
+        1024
+      ).toFixed(2),
+    });
+
     const formData = new FormData();
 
-    formData.append("file", file);
+    formData.append(
+      "file",
+      compressedFile
+    );
+
     formData.append(
       "upload_preset",
       import.meta.env.VITE_UPLOAD_PRESET
@@ -440,6 +626,20 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
 
     const cloudName =
       import.meta.env.VITE_CLOUD_NAME;
+
+    if (!cloudName) {
+      throw new Error(
+        "VITE_CLOUD_NAME غير موجود"
+      );
+    }
+
+    if (
+      !import.meta.env.VITE_UPLOAD_PRESET
+    ) {
+      throw new Error(
+        "VITE_UPLOAD_PRESET غير موجود"
+      );
+    }
 
     const response = await fetch(
       `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
@@ -449,45 +649,80 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
       }
     );
 
+    const responseText =
+      await response.text();
+
+    console.log(
+      "Cloudinary status:",
+      response.status
+    );
+
+    console.log(
+      "Cloudinary response:",
+      responseText
+    );
+
     if (!response.ok) {
+      let cloudinaryError =
+        responseText;
+
+      try {
+        const parsed =
+          JSON.parse(responseText);
+
+        cloudinaryError =
+          parsed?.error?.message ||
+          parsed?.error ||
+          responseText;
+      } catch { }
+
       throw new Error(
-        `Cloudinary upload failed: ${response.status}`
+        `Cloudinary Error ${response.status}: ${cloudinaryError}`
       );
     }
 
-    const data = await response.json();
+    let data;
+
+    try {
+      data =
+        JSON.parse(responseText);
+    } catch {
+      throw new Error(
+        "Cloudinary رجع Response غير صالح"
+      );
+    }
 
     if (!data?.secure_url) {
       throw new Error(
-        "Cloudinary did not return secure_url"
+        "Cloudinary لم يرجع secure_url"
       );
     }
+
+    console.log(
+      "Cloudinary upload successful:",
+      data.secure_url
+    );
 
     return data.secure_url;
   };
 
   // ==========================================
-  // 10. Upload current images
+  // 11. Upload current images
   // ==========================================
 
   const uploadCurrentImages = async () => {
     let finalImageUrl =
       activeModel?.image_url || null;
 
-    // ==========================================
     // Main image
-    // ==========================================
-
     if (imageFile) {
-      finalImageUrl = await uploadToCloudinary(
-        imageFile
-      );
+      finalImageUrl =
+        await uploadToCloudinary(
+          imageFile
+        );
     }
 
-    // ==========================================
-    // Close-up images
-    // ==========================================
-
+    // Existing Cloudinary URLs
     const existingCloseUpUrls =
       closeUpPreviews.filter(
         (preview) =>
@@ -518,224 +753,246 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
   };
 
   // ==========================================
-  // 11. Create / Generate Tech Pack
+  // 12. Create / Generate Tech Pack
   // ==========================================
 
-  const handleSubmitAndGenerate = async () => {
-    if (!modelName?.trim()) {
-      toast.error("برجاء إدخال اسم الموديل أولاً");
-      return;
-    }
+  const handleSubmitAndGenerate =
+    async () => {
+      if (!modelName?.trim()) {
+        toast.error(
+          "برجاء إدخال اسم الموديل أولاً"
+        );
+        return;
+      }
 
-    setIsGenerating(true);
+      setIsGenerating(true);
 
-    try {
-      toast.info("جاري تجهيز الصور...");
+      try {
+        toast.info(
+          "جاري تجهيز وضغط الصور..."
+        );
 
-      const {
-        finalImageUrl,
-        finalCloseUpUrls,
-      } = await uploadCurrentImages();
-
-      const payload = {
-        name: modelName.trim(),
-        notes: notes || "",
-
-        image_url: finalImageUrl || "",
-
-        close_up_images: Array.isArray(finalCloseUpUrls)
-          ? finalCloseUpUrls.filter(Boolean)
-          : [],
-
-        fabrics: Array.isArray(fabrics)
-          ? fabrics.filter((f) => f?.name?.trim())
-          : [],
-
-        colors: Array.isArray(colors)
-          ? colors.filter(
-            (item) =>
-              item?.part?.trim() ||
-              item?.color?.trim()
-          )
-          : [],
-
-        selectedSizes: Array.isArray(selectedSizes)
-          ? selectedSizes.filter(Boolean)
-          : [],
-
-        brand_name: brandName || "",
-
-        collection_id:
-          activeModel?.collection_id,
-      };
-
-      toast.info(
-        "جاري حفظ بيانات الموديل وإرسالها للذكاء الاصطناعي 🤖..."
-      );
-
-      await handleUpdateModelAndGenerateTechPack(
-        activeModel.id,
-        payload
-      );
-
-      await handleUpdateModelRelations(
-        activeModel.id,
-        payload.fabrics,
-        payload.selectedSizes
-      );
-
-      // ==========================================
-      // UPDATE LOCAL STATE
-      // ==========================================
-
-      onModelChange(
-        "tech_pack_status",
-        "created"
-      );
-
-      onModelChange(
-        "image_url",
-        finalImageUrl
-      );
-
-      onModelChange(
-        "close_up_images",
-        payload.close_up_images
-      );
-
-      onModelChange(
-        "name",
-        payload.name
-      );
-
-      onModelChange(
-        "customer_notes",
-        payload.notes
-      );
-
-      onModelChange(
-        "fabrics",
-        payload.fabrics
-      );
-
-      onModelChange(
-        "colors",
-        payload.colors
-      );
-
-      onModelChange(
-        "sizes",
-        payload.selectedSizes
-      );
-
-      onModelChange(
-        "description",
-        JSON.stringify({
-          fabrics: payload.fabrics,
-          colors: payload.colors,
-          sizes: payload.selectedSizes,
-        })
-      );
-
-      onModelChange(
-        "hasError",
-        false
-      );
-
-      // ==========================================
-      // RESET UPLOADED FILES
-      // ==========================================
-
-      setImageFile(null);
-      setCloseUpFiles([]);
-
-      setImagePreview(
-        finalImageUrl || ""
-      );
-
-      setCloseUpPreviews(
-        payload.close_up_images
-      );
-
-      toast.success(
-        "تم الحفظ وإرسال الطلب بنجاح! 🎉"
-      );
-    } catch (error) {
-      console.error(
-        "CREATE TECH PACK ERROR:",
-        error
-      );
-
-      toast.error(
-        "حدث خطأ أثناء الإنشاء أو رفع الصور"
-      );
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-  // ==========================================
-  // 12. UPDATE TECH PACK
-  // ==========================================
-
-  const handleUpdateTechPack = async () => {
-    if (!modelName?.trim()) {
-      toast.error(
-        "برجاء إدخال اسم الموديل أولاً"
-      );
-      return;
-    }
-
-    setIsGenerating(true);
-
-    try {
-      // ==========================================
-      // STEP 1
-      // Upload only new images
-      // ==========================================
-
-      toast.info(
-        "جاري تجهيز الصور والتعديلات..."
-      );
-
-      const {
-        finalImageUrl,
-        finalCloseUpUrls,
-      } = await uploadCurrentImages();
-
-      // ==========================================
-      // STEP 2
-      // Prepare payload
-      // ==========================================
-
-      const payload = {
-        name: modelName,
-        notes,
-
-        image_url: finalImageUrl,
-
-        close_up_images:
+        const {
+          finalImageUrl,
           finalCloseUpUrls,
+        } =
+          await uploadCurrentImages();
 
-        fabrics: fabrics.filter(
-          (f) => f.name?.trim()
-        ),
+        const payload = {
+          name: modelName.trim(),
+          model_number: modelNumber,
+          notes: notes || "",
 
-        colors: colors.filter(
-          (item) =>
-            item.part?.trim() ||
-            item.color?.trim()
-        ),
+          image_url:
+            finalImageUrl || "",
 
-        selectedSizes,
-      };
+          close_up_images:
+            Array.isArray(
+              finalCloseUpUrls
+            )
+              ? finalCloseUpUrls.filter(
+                Boolean
+              )
+              : [],
 
-      // ==========================================
-      // STEP 3
-      // Update model
-      // ==========================================
+          fabrics:
+            Array.isArray(fabrics)
+              ? fabrics.filter(
+                (f) =>
+                  f?.name?.trim()
+              )
+              : [],
 
-      const { data: updatedModel, error: modelError } =
-        await supabase
+          colors:
+            Array.isArray(colors)
+              ? colors.filter(
+                (item) =>
+                  item?.part?.trim() ||
+                  item?.color?.trim()
+              )
+              : [],
+
+          selectedSizes:
+            Array.isArray(
+              selectedSizes
+            )
+              ? selectedSizes.filter(
+                Boolean
+              )
+              : [],
+
+          brand_name:
+            brandName || "",
+
+          collection_id:
+            activeModel?.collection_id,
+        };
+
+        toast.info(
+          "جاري حفظ بيانات الموديل وإرسالها للذكاء الاصطناعي 🤖..."
+        );
+
+        await handleUpdateModelAndGenerateTechPack(
+          activeModel.id,
+          payload
+        );
+
+        await handleUpdateModelRelations(
+          activeModel.id,
+          payload.fabrics,
+          payload.selectedSizes
+        );
+
+        // UPDATE LOCAL STATE
+
+        onModelChange(
+          "tech_pack_status",
+          "created"
+        );
+
+        onModelChange(
+          "model_number",
+          payload.model_number
+        );
+
+        onModelChange(
+          "image_url",
+          finalImageUrl
+        );
+
+        onModelChange(
+          "close_up_images",
+          payload.close_up_images
+        );
+
+        onModelChange(
+          "name",
+          payload.name
+        );
+
+        onModelChange(
+          "customer_notes",
+          payload.notes
+        );
+
+        onModelChange(
+          "fabrics",
+          payload.fabrics
+        );
+
+        onModelChange(
+          "colors",
+          payload.colors
+        );
+
+        onModelChange(
+          "sizes",
+          payload.selectedSizes
+        );
+
+        onModelChange(
+          "description",
+          JSON.stringify({
+            fabrics:
+              payload.fabrics,
+            colors:
+              payload.colors,
+            sizes:
+              payload.selectedSizes,
+          })
+        );
+
+        onModelChange(
+          "hasError",
+          false
+        );
+
+        // RESET UPLOADED FILES
+
+        setImageFile(null);
+        setCloseUpFiles([]);
+
+        setImagePreview(
+          finalImageUrl || ""
+        );
+
+        setCloseUpPreviews(
+          payload.close_up_images
+        );
+
+        toast.success(
+          "تم الحفظ وإرسال الطلب بنجاح! 🎉"
+        );
+      } catch (error) {
+        console.error(
+          "CREATE TECH PACK ERROR:",
+          error
+        );
+
+        toast.error(
+          error?.message ||
+          "حدث خطأ أثناء الإنشاء أو رفع الصور"
+        );
+      } finally {
+        setIsGenerating(false);
+      }
+    };
+
+  // ==========================================
+  // 13. UPDATE TECH PACK
+  // ==========================================
+
+  const handleUpdateTechPack =
+    async () => {
+      if (!modelName?.trim()) {
+        toast.error(
+          "برجاء إدخال اسم الموديل أولاً"
+        );
+        return;
+      }
+
+      setIsGenerating(true);
+
+      try {
+        toast.info(
+          "جاري تجهيز وضغط الصور والتعديلات..."
+        );
+
+        const {
+          finalImageUrl,
+          finalCloseUpUrls,
+        } =
+          await uploadCurrentImages();
+
+        const payload = {
+          name: modelName,
+          notes,
+
+          image_url:
+            finalImageUrl,
+
+          close_up_images:
+            finalCloseUpUrls,
+
+          fabrics: fabrics.filter(
+            (f) => f.name?.trim()
+          ),
+
+          colors: colors.filter(
+            (item) =>
+              item.part?.trim() ||
+              item.color?.trim()
+          ),
+
+          selectedSizes,
+        };
+
+        // Update model
+
+        const {
+          data: updatedModel,
+          error: modelError,
+        } = await supabase
           .from("models")
           .update({
             name: payload.name,
@@ -771,227 +1028,211 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
           .select()
           .single();
 
-      if (modelError) {
-        throw modelError;
-      }
+        if (modelError) {
+          throw modelError;
+        }
 
-      // ==========================================
-      // STEP 4
-      // Fetch latest Tech Pack + relations
-      // IN PARALLEL
-      // ==========================================
-
-      const [
-        _relationsResult,
-        latestTechPackResult,
-      ] = await Promise.all([
-        handleUpdateModelRelations(
-          activeModel.id,
-          payload.fabrics,
-          payload.selectedSizes
-        ),
-
-        supabase
-          .from("tech_packs")
-          .select("content, version")
-          .eq(
-            "model_id",
-            activeModel.id
-          )
-          .order("version", {
-            ascending: false,
-          })
-          .limit(1)
-          .maybeSingle(),
-      ]);
-
-      const {
-        data: latestTechPack,
-        error: techPackError,
-      } = latestTechPackResult;
-
-      if (techPackError) {
-        throw techPackError;
-      }
-
-      // ==========================================
-      // STEP 5
-      // Preserve old Tech Pack data
-      // ==========================================
-
-      const oldContent =
-        latestTechPack?.content || {};
-
-      // ==========================================
-      // STEP 6
-      // Create new Tech Pack content
-      // ==========================================
-
-      const techPackContent = {
-        ...oldContent,
-
-        basic_info: {
-          ...(oldContent.basic_info || {}),
-
-          product_name:
-            updatedModel.name,
-
-          brand:
-            brandName,
-
-          main_fabric:
-            payload.fabrics,
-
-          size_range:
-            payload.selectedSizes.join(
-              " - "
-            ),
-
-          colors:
-            payload.colors,
-
-          // NEW MAIN IMAGE
-          image_url:
-            payload.image_url,
-        },
-
-        technical_description: {
-          ...(oldContent.technical_description ||
-            {}),
-
-          // NEW CLOSE-UP IMAGES
-          close_up_images:
-            payload.close_up_images,
-        },
-      };
-
-      // ==========================================
-      // STEP 7
-      // Insert new version
-      // ==========================================
-
-      const newVersion =
-        (latestTechPack?.version || 0) + 1;
-
-      const {
-        error: insertError,
-      } = await supabase
-        .from("tech_packs")
-        .insert({
-          model_id:
+        // Fetch latest Tech Pack + relations
+        const [
+          _relationsResult,
+          latestTechPackResult,
+        ] = await Promise.all([
+          handleUpdateModelRelations(
             activeModel.id,
-
-          content:
-            techPackContent,
-
-          status:
-            "generated",
-
-          version:
-            newVersion,
-        });
-
-      if (insertError) {
-        throw insertError;
-      }
-
-      // ==========================================
-      // STEP 8
-      // Update local UI
-      // ==========================================
-
-      onModelChange(
-        "name",
-        payload.name
-      );
-
-      onModelChange(
-        "customer_notes",
-        payload.notes
-      );
-
-      onModelChange(
-        "image_url",
-        payload.image_url
-      );
-
-      onModelChange(
-        "close_up_images",
-        payload.close_up_images
-      );
-
-      onModelChange(
-        "colors",
-        payload.colors
-      );
-
-      onModelChange(
-        "fabrics",
-        payload.fabrics
-      );
-
-      onModelChange(
-        "sizes",
-        payload.selectedSizes
-      );
-
-      onModelChange(
-        "description",
-        JSON.stringify({
-          fabrics:
             payload.fabrics,
+            payload.selectedSizes
+          ),
 
-          colors:
-            payload.colors,
+          supabase
+            .from("tech_packs")
+            .select(
+              "content, version"
+            )
+            .eq(
+              "model_id",
+              activeModel.id
+            )
+            .order("version", {
+              ascending: false,
+            })
+            .limit(1)
+            .maybeSingle(),
+        ]);
 
-          sizes:
-            payload.selectedSizes,
-        })
-      );
+        const {
+          data: latestTechPack,
+          error: techPackError,
+        } =
+          latestTechPackResult;
 
-      onModelChange(
-        "tech_pack_status",
-        "created"
-      );
+        if (techPackError) {
+          throw techPackError;
+        }
 
-      onModelChange(
-        "updated_at",
-        new Date().toISOString()
-      );
+        // Preserve old Tech Pack data
 
-      // ==========================================
-      // STEP 9
-      // Clear pending files
-      // ==========================================
+        const oldContent =
+          latestTechPack?.content ||
+          {};
 
-      setImageFile(null);
-      setCloseUpFiles([]);
+        // Create new Tech Pack content
 
-      setImagePreview(
-        payload.image_url
-      );
+        const techPackContent = {
+          ...oldContent,
 
-      setCloseUpPreviews(
-        payload.close_up_images
-      );
+          basic_info: {
+            ...(oldContent.basic_info ||
+              {}),
 
-      toast.success(
-        "تم تحديث الموديل والـ Tech Pack بنجاح ✅"
-      );
-    } catch (error) {
-      console.error(
-        "UPDATE TECH PACK ERROR:",
-        error
-      );
+            product_name:
+              updatedModel.name,
 
-      toast.error(
-        error?.message ||
-        "حدث خطأ أثناء تحديث الموديل والـ Tech Pack"
-      );
-    } finally {
-      setIsGenerating(false);
-    }
-  };
+            brand:
+              brandName,
+
+            main_fabric:
+              payload.fabrics,
+
+            size_range:
+              payload.selectedSizes.join(
+                " - "
+              ),
+
+            colors:
+              payload.colors,
+
+            image_url:
+              payload.image_url,
+          },
+
+          technical_description: {
+            ...(oldContent.technical_description ||
+              {}),
+
+            close_up_images:
+              payload.close_up_images,
+          },
+        };
+
+        // Insert new version
+
+        const newVersion =
+          (latestTechPack?.version ||
+            0) + 1;
+
+        const {
+          error: insertError,
+        } = await supabase
+          .from("tech_packs")
+          .insert({
+            model_id:
+              activeModel.id,
+
+            content:
+              techPackContent,
+
+            status:
+              "generated",
+
+            version:
+              newVersion,
+          });
+
+        if (insertError) {
+          throw insertError;
+        }
+
+        // Update local UI
+
+        onModelChange(
+          "name",
+          payload.name
+        );
+
+        onModelChange(
+          "customer_notes",
+          payload.notes
+        );
+
+        onModelChange(
+          "image_url",
+          payload.image_url
+        );
+
+        onModelChange(
+          "close_up_images",
+          payload.close_up_images
+        );
+
+        onModelChange(
+          "colors",
+          payload.colors
+        );
+
+        onModelChange(
+          "fabrics",
+          payload.fabrics
+        );
+
+        onModelChange(
+          "sizes",
+          payload.selectedSizes
+        );
+
+        onModelChange(
+          "description",
+          JSON.stringify({
+            fabrics:
+              payload.fabrics,
+
+            colors:
+              payload.colors,
+
+            sizes:
+              payload.selectedSizes,
+          })
+        );
+
+        onModelChange(
+          "tech_pack_status",
+          "created"
+        );
+
+        onModelChange(
+          "updated_at",
+          new Date().toISOString()
+        );
+
+        // Clear pending files
+
+        setImageFile(null);
+        setCloseUpFiles([]);
+
+        setImagePreview(
+          payload.image_url
+        );
+
+        setCloseUpPreviews(
+          payload.close_up_images
+        );
+
+        toast.success(
+          "تم تحديث الموديل والـ Tech Pack بنجاح ✅"
+        );
+      } catch (error) {
+        console.error(
+          "UPDATE TECH PACK ERROR:",
+          error
+        );
+
+        toast.error(
+          error?.message ||
+          "حدث خطأ أثناء تحديث الموديل والـ Tech Pack"
+        );
+      } finally {
+        setIsGenerating(false);
+      }
+    };
 
   // ==========================================
   // Return
@@ -1000,6 +1241,9 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
   return {
     modelName,
     setModelName,
+
+    modelNumber,
+    setModelNumber,
 
     notes,
     setNotes,

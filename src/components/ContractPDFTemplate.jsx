@@ -1,5 +1,6 @@
 import React from "react";
 import logo from "../assets/logo.jpeg";
+import { supabase } from "../../supabase";
 
 /* ============================================================
    Helpers
@@ -69,6 +70,62 @@ const getModelTotal = (model, seriesCount) => {
 ============================================================ */
 
 const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
+  const [brandRepresentative, setBrandRepresentative] = React.useState("");
+  console.log(data);
+  const [isLoadingRepresentative, setIsLoadingRepresentative] =
+    React.useState(false);
+
+  React.useEffect(() => {
+    const fetchBrandRepresentative = async () => {
+      if (!data?.id) {
+        setBrandRepresentative("");
+        return;
+      }
+
+      try {
+        // 1. نجيب الـ brand_id من الكولكشن
+        const { data: collection, error: collectionError } = await supabase
+          .from("collections")
+          .select("brand_id")
+          .eq("id", data.id)
+          .single();
+
+        if (collectionError) {
+          console.error("Error fetching collection:", collectionError);
+          setBrandRepresentative("");
+          return;
+        }
+
+        if (!collection?.brand_id) {
+          console.warn("Collection has no brand_id");
+          setBrandRepresentative("");
+          return;
+        }
+
+        // 2. نجيب client_name من البراند
+        const { data: brand, error: brandError } = await supabase
+          .from("brands")
+          .select("client_name")
+          .eq("id", collection.brand_id)
+          .single();
+
+        if (brandError) {
+          console.error("Error fetching brand:", brandError);
+          setBrandRepresentative("");
+          return;
+        }
+
+        // 3. نحط اسم ممثل البراند
+        setBrandRepresentative(brand?.client_name || "");
+      } catch (error) {
+        console.error("Error fetching brand representative:", error);
+        setBrandRepresentative("");
+      }
+    };
+
+    fetchBrandRepresentative();
+  }, [data?.id]);
+
   if (!data) return null;
 
   let grandTotalQty = 0;
@@ -269,10 +326,12 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
             <span className="font-bold blue-text">بصفته/ا:</span>{" "}
             <span className="text-transparent">____________________</span>
           </p>
-
           <p>
             <span className="font-bold blue-text text-xs">الطرف الثاني:</span>{" "}
-            {safeText(data.brandName)}، ويمثلها السيد/ة: أ. أحمد صبري{" "}
+            {safeText(data.brandName)}، ويمثلها السيد/ة:{" "}
+            {isLoadingRepresentative
+              ? "جاري التحميل..."
+              : safeText(brandRepresentative, "____________________")}{" "}
             <span className="font-bold blue-text">بصفته/ا:</span>{" "}
             <span className="text-transparent">____________________</span>،{" "}
             <span className="font-bold blue-text">سجل تجاري/رقم رسمي:</span>{" "}
@@ -574,8 +633,12 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
           <tr>
             <td className="text-right p-4 align-top">
               <div className="space-y-4 font-bold text-[11px] blue-text">
-                <p>الاسم: أ. أحمد صبري</p>
-
+                <p>
+                  الاسم:{" "}
+                  {isLoadingRepresentative
+                    ? "جاري التحميل..."
+                    : safeText(brandRepresentative, "____________________")}
+                </p>
                 <p>
                   التوقيع والختم:
                   <span className="text-transparent">

@@ -21,6 +21,7 @@ export const handleUpdateModelAndGenerateTechPack = async (modelId, payload) => 
     .from("models")
     .update({
       name: payload.name,
+      model_number: payload.model_number,
       customer_notes: payload.notes,
       image_url: payload.image_url,
       colors: payload.colors,

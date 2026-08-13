@@ -10,6 +10,9 @@ const ModelForm = ({ activeModel, onModelChange, brandName }) => {
   const {
     modelName,
     setModelName,
+    // 💡 سحبنا رقم الموديل من الـ Hook
+    modelNumber,
+    setModelNumber,
     notes,
     setNotes,
     imagePreview,
@@ -40,20 +43,19 @@ const ModelForm = ({ activeModel, onModelChange, brandName }) => {
       className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm flex flex-col gap-6"
       dir="rtl"
     >
-      {/* 1. الهيدر والبيانات الأساسية والصورة */}
       <ModelBasicInfo
         activeModel={activeModel}
         modelName={modelName}
         setModelName={setModelName}
+        modelNumber={modelNumber}
+        setModelNumber={setModelNumber}
         imagePreview={imagePreview}
         handleImageChange={handleImageChange}
-        // 💡 السطور دي اللي كانت ناقصة ومخلية الصور ماتتقريش!
         closeUpPreviews={closeUpPreviews}
         handleCloseUpChange={handleCloseUpChange}
         removeCloseUpImage={removeCloseUpImage}
       />
 
-      {/* 2. الخامات والألوان */}
       <ModelFabricsAndColors
         fabrics={fabrics}
         addFabric={addFabric}
@@ -65,7 +67,6 @@ const ModelForm = ({ activeModel, onModelChange, brandName }) => {
         removeColor={removeColor}
       />
 
-      {/* 3. المقاسات والملاحظات */}
       <ModelSizesAndNotes
         sizesList={sizesList}
         selectedSizes={selectedSizes}
@@ -76,13 +77,18 @@ const ModelForm = ({ activeModel, onModelChange, brandName }) => {
 
       <hr className="border-slate-100 mt-4 mb-2" />
 
-      {/* 4. الورقة الفنية والشات */}
       <TechPackSection
         activeModel={activeModel}
         isGenerating={isGenerating}
         handleSubmitAndGenerate={handleSubmitAndGenerate}
         brandName={brandName}
         handleUpdateTechPack={handleUpdateTechPack}
+        mainImage={imagePreview}
+        closeUpPreviews={closeUpPreviews}
+        fabrics={fabrics}
+        colors={colors}
+        selectedSizes={selectedSizes}
+        notes={notes}
       />
     </div>
   );

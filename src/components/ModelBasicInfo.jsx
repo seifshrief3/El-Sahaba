@@ -4,6 +4,8 @@ const ModelBasicInfo = ({
   activeModel,
   modelName,
   setModelName,
+  modelNumber,
+  setModelNumber,
   imagePreview,
   handleImageChange,
   closeUpPreviews,
@@ -16,9 +18,8 @@ const ModelBasicInfo = ({
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-bold text-[#1a365d] flex items-center gap-2">
             {activeModel.name || "اسم الموديل"}
-
             <span className="text-sm font-normal text-slate-400">
-              — {activeModel.code || "كود الموديل"}
+              — {activeModel.model_number || "كود الموديل"}
             </span>
           </h3>
 
@@ -68,7 +69,6 @@ const ModelBasicInfo = ({
               ) : (
                 <>
                   <span className="text-3xl text-slate-400 mb-1">+</span>
-
                   <span className="text-xs text-slate-500 font-medium text-center px-2">
                     إرفاق صورة
                   </span>
@@ -139,7 +139,6 @@ const ModelBasicInfo = ({
             <label className="block text-sm font-bold text-slate-700 mb-2 text-right">
               اسم المنتج *
             </label>
-
             <input
               type="text"
               value={modelName}
@@ -151,14 +150,14 @@ const ModelBasicInfo = ({
 
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2 text-right">
-              رقم الموديل (تلقائي)
+              رقم / كود الموديل *
             </label>
-
             <input
               type="text"
-              disabled
-              value={activeModel?.model_number || "M-XXX"}
-              className="w-full border border-slate-200 bg-slate-50 rounded-lg p-3 text-sm text-slate-500 text-right font-mono"
+              value={modelNumber || ""}
+              onChange={(e) => setModelNumber(e.target.value)}
+              placeholder="مثال: MOD-2026-A"
+              className="w-full border border-slate-300 bg-white rounded-lg p-3 text-sm text-slate-800 text-right font-bold focus:outline-none focus:border-[#1a365d]"
             />
           </div>
         </div>
