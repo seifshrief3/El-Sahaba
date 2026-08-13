@@ -78,55 +78,11 @@ const safeText = (value, fallback = "-") => {
    Extract Components
 ============================================================ */
 
-/*
-  الشكل المتوقع:
-
-  [
-    {
-      part: "تيشيرت",
-      color: "بينك"
-    },
-    {
-      part: "بنطلون",
-      color: "أسود"
-    }
-  ]
-
-  أو لو عندنا Variants:
-
-  [
-    {
-      variant: 1,
-      part: "تيشيرت",
-      color: "بينك"
-    },
-    {
-      variant: 1,
-      part: "بنطلون",
-      color: "أسود"
-    },
-    {
-      variant: 2,
-      part: "تيشيرت",
-      color: "رمادي"
-    },
-    {
-      variant: 2,
-      part: "بنطلون",
-      color: "أبيض"
-    }
-  ]
-*/
-
 const extractComponents = (...values) => {
   for (const value of values) {
     if (value === null || value === undefined) {
       continue;
     }
-
-    /* ========================================================
-       Array
-    ======================================================== */
 
     if (Array.isArray(value)) {
       const result = [];
@@ -166,10 +122,6 @@ const extractComponents = (...values) => {
       }
     }
 
-    /* ========================================================
-       Object
-    ======================================================== */
-
     if (typeof value === "object" && !Array.isArray(value)) {
       const directColor =
         value.color ?? value.colors ?? value.colour ?? value.color_name;
@@ -192,17 +144,6 @@ const extractComponents = (...values) => {
           },
         ];
       }
-
-      /*
-        لو الـ object عبارة عن:
-
-        {
-          "تيشيرت": "بينك",
-          "بنطلون": "أسود"
-        }
-
-        نحوله إلى Components.
-      */
 
       const entries = Object.entries(value).filter(
         ([key]) =>
@@ -235,10 +176,6 @@ const extractComponents = (...values) => {
         }
       }
     }
-
-    /* ========================================================
-       String
-    ======================================================== */
 
     if (typeof value === "string") {
       const colors = normalizeToStrings(value);
@@ -312,22 +249,6 @@ const extractSizes = (...values) => {
 ============================================================ */
 
 const buildVariants = (components) => {
-  /*
-    لو الداتا القديمة لا تحتوي variant:
-
-    تيشيرت / بينك
-    بنطلون / أسود
-
-    نعتبرهم Variant واحد.
-
-    لو الداتا تحتوي:
-
-    variant: 1
-    variant: 2
-
-    نستخدمها كما هي.
-  */
-
   const hasExplicitVariants = components.some(
     (component) =>
       component.variant !== null &&
@@ -384,24 +305,11 @@ const StartOrder = () => {
   const [isSendingContract, setIsSendingApproval] = useState(false);
 
   /*
-    الشكل الجديد:
+    العقد نفسه لا يوجد له جدول في الـ schema الحالي.
 
-    {
-      modelId: {
-        1: {
-          S: 10,
-          M: 15,
-          L: 12
-        },
-
-        2: {
-          S: 5,
-          M: 8,
-          L: 10
-        }
-      }
-    }
+    لذلك مؤقتًا بنحفظ حالة إنشاء العقد في sessionStorage.
   */
+  const [contractCreated, setContractCreated] = useState(false);
 
   const [seriesCounts, setSeriesCounts] = useState({});
 
@@ -422,26 +330,33 @@ const StartOrder = () => {
           .from("collections")
           .select(
             `
+              id,
+              name,
+              brands (
+                name_ar,
+                name_en
+              ),
+              quotations (
                 id,
+                quotation_number,
+                total_sales_price,
+                status
+              ),
+              models (
+                id,
+                model_number,
                 name,
-                brands (
-                  name_ar,
-                  name_en
+                image_url,
+                colors,
+                tech_packs (
+                  content
                 ),
-                models (
-                  id,
-                  model_number,
-                  name,
-                  image_url,
-                  colors,
-                  tech_packs (
-                    content
-                  ),
-                  quotation_items (
-                    selling_price
-                  )
+                quotation_items (
+                  selling_price,
+                  quotation_id
                 )
-              `,
+              )
+            `,
           )
           .eq("id", id)
           .single();
@@ -451,12 +366,31 @@ const StartOrder = () => {
         }
 
         /* ======================================================
-             تجهيز الموديلات
-          ====================================================== */
+           Approved Quotation
+        ====================================================== */
+
+        const approvedQuotation =
+          orderData.quotations?.find(
+            (quotation) => quotation.status === "approved",
+          ) || null;
+
+        /* ======================================================
+           Contract Created - Temporary
+        ====================================================== */
+
+        const savedContractStatus = sessionStorage.getItem(
+          `contract_created_${orderData.id}`,
+        );
+
+        const hasCreatedContract = savedContractStatus === "true";
+
+        setContractCreated(hasCreatedContract);
+
+        /* ======================================================
+           Models
+        ====================================================== */
 
         const formattedModels = (orderData.models || []).map((model, index) => {
-          /* ================= Tech Pack ================= */
-
           const tpContent = Array.isArray(model.tech_packs)
             ? model.tech_packs[0]?.content
             : model.tech_packs?.content;
@@ -483,10 +417,6 @@ const StartOrder = () => {
                   : null,
             }))
             .filter((component) => component.color);
-
-          /*
-                  لو مفيش Components
-                */
 
           if (components.length === 0) {
             components = [
@@ -522,11 +452,14 @@ const StartOrder = () => {
 
           /* ================= Price ================= */
 
-          const price =
-            Array.isArray(model.quotation_items) &&
-            model.quotation_items.length > 0
-              ? Number(model.quotation_items[0]?.selling_price) || 0
-              : 0;
+          const quotationItem =
+            model.quotation_items?.find(
+              (item) => item.quotation_id === approvedQuotation?.id,
+            ) || null;
+
+          const price = quotationItem
+            ? Number(quotationItem.selling_price) || 0
+            : 0;
 
           /* ================= Fabric ================= */
 
@@ -575,8 +508,8 @@ const StartOrder = () => {
         });
 
         /* ======================================================
-             Collection
-          ====================================================== */
+           Collection
+        ====================================================== */
 
         const formattedData = {
           id: orderData.id,
@@ -590,14 +523,18 @@ const StartOrder = () => {
 
           collectionName: safeText(orderData.name, "غير محدد"),
 
+          quotation: approvedQuotation,
+
+          hasApprovedQuotation: !!approvedQuotation,
+
           models: formattedModels,
         };
 
         setCollectionInfo(formattedData);
 
         /* ======================================================
-             Initial Series
-          ====================================================== */
+           Initial Series
+        ====================================================== */
 
         const initialCounts = {};
 
@@ -744,6 +681,21 @@ const StartOrder = () => {
     contentRef: contractRef,
 
     documentTitle: `عقد_تصنيع_${collectionInfo?.brandName || "فارغ"}`,
+
+    onAfterPrint: () => {
+      /*
+        تسجيل أن العقد تم إنشاؤه بعد انتهاء الطباعة.
+        مؤقتًا باستخدام sessionStorage.
+      */
+
+      if (collectionInfo?.id) {
+        sessionStorage.setItem(`contract_created_${collectionInfo.id}`, "true");
+
+        setContractCreated(true);
+
+        toast.success("تم إصدار عقد العميل بنجاح.");
+      }
+    },
   });
 
   /* ============================================================
@@ -751,17 +703,41 @@ const StartOrder = () => {
   ============================================================ */
 
   const handleSaveAndIssue = async () => {
+    /* ==========================================================
+       Quotation Validation
+    ========================================================== */
+
+    if (!collectionInfo?.hasApprovedQuotation) {
+      toast.error("لا يمكن إصدار أمر التشغيل بدون عرض سعر معتمد.");
+
+      return;
+    }
+
+    /* ==========================================================
+       Contract Validation
+    ========================================================== */
+
+    if (!contractCreated) {
+      toast.error("لا يمكن إصدار أمر التشغيل قبل إصدار عقد العميل.");
+
+      return;
+    }
+
+    /* ==========================================================
+       Series Validation
+    ========================================================== */
+
+    if (hasInvalidSeries()) {
+      toast.error("برجاء تحديد عدد سريهات أكبر من صفر لكل Variant ولكل مقاس.");
+
+      return;
+    }
+
     const confirmIssue = window.confirm(
       "هل أنت متأكد من حفظ وإصدار أمر التشغيل؟ ستتم إضافة البيانات لقسم التخطيط بشكل نهائي.",
     );
 
     if (!confirmIssue) {
-      return;
-    }
-
-    if (hasInvalidSeries()) {
-      toast.error("برجاء تحديد عدد سريهات أكبر من صفر لكل Variant ولكل مقاس.");
-
       return;
     }
 
@@ -788,6 +764,83 @@ const StartOrder = () => {
       toast.error(error.message || "حدث خطأ أثناء إصدار أمر التشغيل.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  /* ============================================================
+     Send Contract For Approval
+  ============================================================ */
+
+  const handleSendContractForApproval = async () => {
+    /* ==========================================================
+       Quotation Validation
+    ========================================================== */
+
+    if (!collectionInfo?.hasApprovedQuotation) {
+      toast.error("لا يمكن إرسال العقد بدون عرض سعر معتمد.");
+
+      return;
+    }
+
+    /* ==========================================================
+       Series Validation
+    ========================================================== */
+
+    if (hasInvalidSeries()) {
+      toast.error(
+        "برجاء التأكد من تحديد عدد سريهات أكبر من صفر لكل Variant ولكل مقاس.",
+      );
+
+      return;
+    }
+
+    /* ==========================================================
+       Price Validation
+    ========================================================== */
+
+    const hasUnpricedModels = collectionInfo.models.some(
+      (model) => !model.approvedPrice || model.approvedPrice <= 0,
+    );
+
+    if (hasUnpricedModels) {
+      toast.error(
+        "لا يمكن إرسال العقد! هناك موديلات لم يتم تسعيرها واعتمادها بعد.",
+      );
+
+      return;
+    }
+
+    setIsSendingApproval(true);
+
+    try {
+      const contractDetails = `
+مطلوب اعتماد عقد تصنيع.
+
+البراند: ${collectionInfo.brandName}
+الكولكشن: ${collectionInfo.collectionName}
+رقم عرض السعر: ${collectionInfo.quotation?.quotation_number || "-"}
+إجمالي الكمية: ${grandTotalQty} قطعة.
+إجمالي سعر البيع: ${collectionInfo.quotation?.total_sales_price || 0}
+      `.trim();
+
+      await sendForApproval(id, "contract", contractDetails);
+
+      /*
+        مهم:
+        هنا لا نسجل العقد كـ "مُصدر" لأن العقد
+        تم إرساله للاعتماد فقط.
+
+        إنشاء العقد فعليًا يتم عند الضغط على
+        "إصدار عقد العمل".
+      */
+
+      toast.success("تم إرسال العقد للمدير للاعتماد.");
+    } catch (error) {
+      console.error(error);
+
+      toast.error(error.message || "حدث خطأ أثناء إرسال العقد للاعتماد.");
+    } finally {
+      setIsSendingApproval(false);
     }
   };
 
@@ -880,9 +933,23 @@ const StartOrder = () => {
             </p>
           </div>
 
-          <span className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full text-sm font-bold border border-emerald-200">
-            جاهز للتشغيل ✓
-          </span>
+          <div className="flex flex-wrap gap-2">
+            {collectionInfo.hasApprovedQuotation ? (
+              <span className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full text-sm font-bold border border-emerald-200">
+                عرض السعر معتمد ✓
+              </span>
+            ) : (
+              <span className="bg-red-50 text-red-700 px-4 py-2 rounded-full text-sm font-bold border border-red-200">
+                لا يوجد عرض سعر معتمد
+              </span>
+            )}
+
+            {contractCreated && (
+              <span className="bg-blue-50 text-blue-700 px-4 py-2 rounded-full text-sm font-bold border border-blue-200">
+                العقد مُصدر ✓
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -949,7 +1016,7 @@ const StartOrder = () => {
                 key={model.id}
                 className="border border-slate-200 rounded-xl overflow-hidden"
               >
-                {/* ================= Model Header ================= */}
+                {/* Model Header */}
 
                 <div className="bg-slate-50 p-4 border-b border-slate-200">
                   <div className="flex items-center justify-between gap-4">
@@ -993,7 +1060,7 @@ const StartOrder = () => {
                   </div>
                 </div>
 
-                {/* ================= Variants ================= */}
+                {/* Variants */}
 
                 <div className="p-4 space-y-5">
                   {model.variants.map((variant) => (
@@ -1001,7 +1068,7 @@ const StartOrder = () => {
                       key={`${model.id}-variant-${variant.variantKey}`}
                       className="border border-slate-200 rounded-xl overflow-hidden"
                     >
-                      {/* ================= Variant Header ================= */}
+                      {/* Variant Header */}
 
                       <div className="bg-[#1a365d] text-white p-4">
                         <div className="flex flex-col sm:flex-row justify-between gap-3">
@@ -1043,7 +1110,7 @@ const StartOrder = () => {
                         </div>
                       </div>
 
-                      {/* ================= Sizes ================= */}
+                      {/* Sizes */}
 
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm text-center min-w-[650px]">
@@ -1120,9 +1187,7 @@ const StartOrder = () => {
             ))}
           </div>
 
-          {/* ==================================================
-              Grand Total
-          ================================================== */}
+          {/* Grand Total */}
 
           <div className="mt-6 bg-slate-50 p-4 rounded-xl border border-slate-200 flex justify-between items-center">
             <span className="text-slate-600 font-bold">
@@ -1143,78 +1208,154 @@ const StartOrder = () => {
           ================================================== */}
 
           <div className="mt-8 pt-6 border-t border-slate-100 flex flex-wrap justify-end gap-3">
+            {/* ==================================================
+                Work Order
+            ================================================== */}
+
             <button
               onClick={handlePrintWO}
-              className="bg-blue-600 hover:bg-blue-800 text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto"
+              disabled={
+                !collectionInfo.hasApprovedQuotation || !contractCreated
+              }
+              title={
+                !collectionInfo.hasApprovedQuotation
+                  ? "يجب وجود عرض سعر معتمد أولاً"
+                  : !contractCreated
+                    ? "يجب إصدار عقد العميل أولاً"
+                    : ""
+              }
+              className={`text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto ${
+                !collectionInfo.hasApprovedQuotation || !contractCreated
+                  ? "bg-slate-300 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-800"
+              }`}
             >
               طباعة ملف أمر التشغيل (PDF)
             </button>
 
+            {/* ==================================================
+                Contract
+            ================================================== */}
+
             <button
               onClick={handlePrintContract}
-              className="bg-slate-800 hover:bg-slate-900 text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto"
+              disabled={!collectionInfo.hasApprovedQuotation}
+              title={
+                !collectionInfo.hasApprovedQuotation
+                  ? "يجب وجود عرض سعر معتمد أولاً"
+                  : ""
+              }
+              className={`text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto ${
+                !collectionInfo.hasApprovedQuotation
+                  ? "bg-slate-300 cursor-not-allowed"
+                  : "bg-slate-800 hover:bg-slate-900"
+              }`}
             >
-              إصدار عقد العمل (PDF)
+              {!collectionInfo.hasApprovedQuotation
+                ? "لا يوجد عرض سعر معتمد"
+                : contractCreated
+                  ? "إعادة إصدار عقد العمل (PDF)"
+                  : "إصدار عقد العمل (PDF)"}
             </button>
+
+            {/* ==================================================
+                Save & Issue
+            ================================================== */}
 
             <button
               onClick={handleSaveAndIssue}
-              disabled={isSubmitting}
-              className={`${
-                isSubmitting
+              disabled={
+                isSubmitting ||
+                !collectionInfo.hasApprovedQuotation ||
+                !contractCreated
+              }
+              title={
+                !collectionInfo.hasApprovedQuotation
+                  ? "يجب وجود عرض سعر معتمد"
+                  : !contractCreated
+                    ? "يجب إصدار عقد العميل أولاً"
+                    : ""
+              }
+              className={`text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto ${
+                isSubmitting ||
+                !collectionInfo.hasApprovedQuotation ||
+                !contractCreated
                   ? "bg-slate-400 cursor-not-allowed"
                   : "bg-[#b91c1c] hover:bg-red-800"
-              } text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto`}
+              }`}
             >
-              {isSubmitting ? "جاري الإصدار..." : "حفظ وإصدار للتخطيط"}
+              {isSubmitting
+                ? "جاري الإصدار..."
+                : !collectionInfo.hasApprovedQuotation
+                  ? "لا يوجد عرض سعر معتمد"
+                  : !contractCreated
+                    ? "أصدر العقد أولاً"
+                    : "حفظ وإصدار للتخطيط"}
             </button>
+
+            {/* ==================================================
+                Send Contract For Approval
+            ================================================== */}
 
             <button
-              onClick={async () => {
-                if (hasInvalidSeries()) {
-                  toast.error(
-                    "برجاء التأكد من تحديد عدد سريهات أكبر من صفر لكل Variant ولكل مقاس.",
-                  );
-
-                  return;
-                }
-
-                const hasUnpricedModels = collectionInfo.models.some(
-                  (model) => !model.approvedPrice || model.approvedPrice <= 0,
-                );
-
-                if (hasUnpricedModels) {
-                  toast.error(
-                    "لا يمكن إرسال العقد! هناك موديلات لم يتم تسعيرها واعتمادها بعد.",
-                  );
-
-                  return;
-                }
-
-                setIsSendingApproval(true);
-
-                try {
-                  const contractDetails = `مطلوب اعتماد عقد تصنيع. إجمالي الكمية: ${grandTotalQty} قطعة.`;
-
-                  await sendForApproval(id, "contract", contractDetails);
-
-                  toast.success("تم إرسال العقد للمدير للاعتماد");
-                } catch (error) {
-                  toast.error(error.message || "حدث خطأ أثناء الإرسال");
-                } finally {
-                  setIsSendingApproval(false);
-                }
-              }}
-              disabled={isSendingContract}
-              className={`${
-                isSendingContract
+              onClick={handleSendContractForApproval}
+              disabled={
+                isSendingContract || !collectionInfo.hasApprovedQuotation
+              }
+              className={`text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto ${
+                isSendingContract || !collectionInfo.hasApprovedQuotation
                   ? "bg-slate-400 cursor-not-allowed"
                   : "bg-emerald-600 hover:bg-emerald-700"
-              } text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto`}
+              }`}
             >
-              {isSendingContract ? "جاري الإرسال..." : "إرسال العقد للاعتماد"}
+              {isSendingContract
+                ? "جاري الإرسال..."
+                : !collectionInfo.hasApprovedQuotation
+                  ? "لا يوجد عرض سعر معتمد"
+                  : "إرسال العقد للاعتماد"}
             </button>
           </div>
+
+          {/* ==================================================
+              Status Message
+          ================================================== */}
+
+          {!collectionInfo.hasApprovedQuotation && (
+            <div className="mt-5 p-4 rounded-xl bg-red-50 border border-red-200 text-right">
+              <div className="font-bold text-red-700 mb-1">
+                لا يمكن المتابعة
+              </div>
+
+              <div className="text-sm text-red-600">
+                يجب وجود عرض سعر معتمد لهذا الكولكشن قبل إصدار العقد أو أمر
+                التشغيل.
+              </div>
+            </div>
+          )}
+
+          {collectionInfo.hasApprovedQuotation && !contractCreated && (
+            <div className="mt-5 p-4 rounded-xl bg-amber-50 border border-amber-200 text-right">
+              <div className="font-bold text-amber-700 mb-1">خطوة متبقية</div>
+
+              <div className="text-sm text-amber-600">
+                تم اعتماد عرض السعر. قم بإصدار عقد العميل أولاً حتى تتمكن من
+                إصدار أمر التشغيل للتخطيط.
+              </div>
+            </div>
+          )}
+
+          {collectionInfo.hasApprovedQuotation && contractCreated && (
+            <div className="mt-5 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-right">
+              <div className="font-bold text-emerald-700 mb-1">
+                جاهز لإصدار أمر التشغيل ✓
+              </div>
+
+              <div className="text-sm text-emerald-600">
+                عرض السعر معتمد والعقد تم إصداره. يمكنك الآن إرسال أمر التشغيل
+                إلى التخطيط.
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

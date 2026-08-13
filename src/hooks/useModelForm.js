@@ -942,298 +942,150 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
   // 13. UPDATE TECH PACK
   // ==========================================
 
-  const handleUpdateTechPack =
-    async () => {
-      if (!modelName?.trim()) {
-        toast.error(
-          "برجاء إدخال اسم الموديل أولاً"
-        );
-        return;
+  const handleUpdateTechPack = async () => {
+    if (!modelName?.trim()) {
+      toast.error("برجاء إدخال اسم الموديل أولاً");
+      return;
+    }
+
+    setIsGenerating(true);
+
+    try {
+      toast.info("جاري تجهيز وضغط الصور والتعديلات...");
+
+      const { finalImageUrl, finalCloseUpUrls } = await uploadCurrentImages();
+
+      // 💡 1. إضافة model_number للـ payload
+      const payload = {
+        name: modelName,
+        model_number: modelNumber, // <--- السطر ده اتضاف
+        notes,
+        image_url: finalImageUrl,
+        close_up_images: finalCloseUpUrls,
+        fabrics: fabrics.filter((f) => f.name?.trim()),
+        colors: colors.filter((item) => item.part?.trim() || item.color?.trim()),
+        selectedSizes,
+      };
+
+      // 💡 2. تحديث جدول models بكود الموديل الجديد
+      const { data: updatedModel, error: modelError } = await supabase
+        .from("models")
+        .update({
+          name: payload.name,
+          model_number: payload.model_number, // <--- السطر ده اتضاف
+          customer_notes: payload.notes,
+          image_url: payload.image_url,
+          close_up_images: payload.close_up_images,
+          colors: payload.colors,
+          description: JSON.stringify({
+            fabrics: payload.fabrics,
+            colors: payload.colors,
+            sizes: payload.selectedSizes,
+          }),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", activeModel.id)
+        .select()
+        .single();
+
+      if (modelError) {
+        throw modelError;
       }
 
-      setIsGenerating(true);
-
-      try {
-        toast.info(
-          "جاري تجهيز وضغط الصور والتعديلات..."
-        );
-
-        const {
-          finalImageUrl,
-          finalCloseUpUrls,
-        } =
-          await uploadCurrentImages();
-
-        const payload = {
-          name: modelName,
-          notes,
-
-          image_url:
-            finalImageUrl,
-
-          close_up_images:
-            finalCloseUpUrls,
-
-          fabrics: fabrics.filter(
-            (f) => f.name?.trim()
-          ),
-
-          colors: colors.filter(
-            (item) =>
-              item.part?.trim() ||
-              item.color?.trim()
-          ),
-
-          selectedSizes,
-        };
-
-        // Update model
-
-        const {
-          data: updatedModel,
-          error: modelError,
-        } = await supabase
-          .from("models")
-          .update({
-            name: payload.name,
-
-            customer_notes:
-              payload.notes,
-
-            image_url:
-              payload.image_url,
-
-            close_up_images:
-              payload.close_up_images,
-
-            colors:
-              payload.colors,
-
-            description:
-              JSON.stringify({
-                fabrics:
-                  payload.fabrics,
-
-                colors:
-                  payload.colors,
-
-                sizes:
-                  payload.selectedSizes,
-              }),
-
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq("id", activeModel.id)
-          .select()
-          .single();
-
-        if (modelError) {
-          throw modelError;
-        }
-
-        // Fetch latest Tech Pack + relations
-        const [
-          _relationsResult,
-          latestTechPackResult,
-        ] = await Promise.all([
-          handleUpdateModelRelations(
-            activeModel.id,
-            payload.fabrics,
-            payload.selectedSizes
-          ),
-
-          supabase
-            .from("tech_packs")
-            .select(
-              "content, version"
-            )
-            .eq(
-              "model_id",
-              activeModel.id
-            )
-            .order("version", {
-              ascending: false,
-            })
-            .limit(1)
-            .maybeSingle(),
-        ]);
-
-        const {
-          data: latestTechPack,
-          error: techPackError,
-        } =
-          latestTechPackResult;
-
-        if (techPackError) {
-          throw techPackError;
-        }
-
-        // Preserve old Tech Pack data
-
-        const oldContent =
-          latestTechPack?.content ||
-          {};
-
-        // Create new Tech Pack content
-
-        const techPackContent = {
-          ...oldContent,
-
-          basic_info: {
-            ...(oldContent.basic_info ||
-              {}),
-
-            product_name:
-              updatedModel.name,
-
-            brand:
-              brandName,
-
-            main_fabric:
-              payload.fabrics,
-
-            size_range:
-              payload.selectedSizes.join(
-                " - "
-              ),
-
-            colors:
-              payload.colors,
-
-            image_url:
-              payload.image_url,
-          },
-
-          technical_description: {
-            ...(oldContent.technical_description ||
-              {}),
-
-            close_up_images:
-              payload.close_up_images,
-          },
-        };
-
-        // Insert new version
-
-        const newVersion =
-          (latestTechPack?.version ||
-            0) + 1;
-
-        const {
-          error: insertError,
-        } = await supabase
-          .from("tech_packs")
-          .insert({
-            model_id:
-              activeModel.id,
-
-            content:
-              techPackContent,
-
-            status:
-              "generated",
-
-            version:
-              newVersion,
-          });
-
-        if (insertError) {
-          throw insertError;
-        }
-
-        // Update local UI
-
-        onModelChange(
-          "name",
-          payload.name
-        );
-
-        onModelChange(
-          "customer_notes",
-          payload.notes
-        );
-
-        onModelChange(
-          "image_url",
-          payload.image_url
-        );
-
-        onModelChange(
-          "close_up_images",
-          payload.close_up_images
-        );
-
-        onModelChange(
-          "colors",
-          payload.colors
-        );
-
-        onModelChange(
-          "fabrics",
-          payload.fabrics
-        );
-
-        onModelChange(
-          "sizes",
+      // Fetch latest Tech Pack + relations
+      const [_relationsResult, latestTechPackResult] = await Promise.all([
+        handleUpdateModelRelations(
+          activeModel.id,
+          payload.fabrics,
           payload.selectedSizes
-        );
+        ),
+        supabase
+          .from("tech_packs")
+          .select("content, version")
+          .eq("model_id", activeModel.id)
+          .order("version", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
 
-        onModelChange(
-          "description",
-          JSON.stringify({
-            fabrics:
-              payload.fabrics,
+      const { data: latestTechPack, error: techPackError } = latestTechPackResult;
 
-            colors:
-              payload.colors,
-
-            sizes:
-              payload.selectedSizes,
-          })
-        );
-
-        onModelChange(
-          "tech_pack_status",
-          "created"
-        );
-
-        onModelChange(
-          "updated_at",
-          new Date().toISOString()
-        );
-
-        // Clear pending files
-
-        setImageFile(null);
-        setCloseUpFiles([]);
-
-        setImagePreview(
-          payload.image_url
-        );
-
-        setCloseUpPreviews(
-          payload.close_up_images
-        );
-
-        toast.success(
-          "تم تحديث الموديل والـ Tech Pack بنجاح ✅"
-        );
-      } catch (error) {
-        console.error(
-          "UPDATE TECH PACK ERROR:",
-          error
-        );
-
-        toast.error(
-          error?.message ||
-          "حدث خطأ أثناء تحديث الموديل والـ Tech Pack"
-        );
-      } finally {
-        setIsGenerating(false);
+      if (techPackError) {
+        throw techPackError;
       }
-    };
 
+      // Preserve old Tech Pack data
+      const oldContent = latestTechPack?.content || {};
+
+      // Create new Tech Pack content
+      const techPackContent = {
+        ...oldContent,
+        basic_info: {
+          ...(oldContent.basic_info || {}),
+          product_name: updatedModel.name,
+          model_number: payload.model_number, // 💡 3. تحديث الكود جوه الـ Tech Pack نفسه
+          brand: brandName,
+          main_fabric: payload.fabrics,
+          size_range: payload.selectedSizes.join(" - "),
+          colors: payload.colors,
+          image_url: payload.image_url,
+        },
+        technical_description: {
+          ...(oldContent.technical_description || {}),
+          close_up_images: payload.close_up_images,
+        },
+      };
+
+      // Insert new version
+      const newVersion = (latestTechPack?.version || 0) + 1;
+
+      const { error: insertError } = await supabase
+        .from("tech_packs")
+        .insert({
+          model_id: activeModel.id,
+          content: techPackContent,
+          status: "generated",
+          version: newVersion,
+        });
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      // 💡 4. تحديث الـ UI عشان يعرض الرقم الجديد فوراً
+      onModelChange("name", payload.name);
+      onModelChange("model_number", payload.model_number); // <--- السطر ده اتضاف
+      onModelChange("customer_notes", payload.notes);
+      onModelChange("image_url", payload.image_url);
+      onModelChange("close_up_images", payload.close_up_images);
+      onModelChange("colors", payload.colors);
+      onModelChange("fabrics", payload.fabrics);
+      onModelChange("sizes", payload.selectedSizes);
+      onModelChange(
+        "description",
+        JSON.stringify({
+          fabrics: payload.fabrics,
+          colors: payload.colors,
+          sizes: payload.selectedSizes,
+        })
+      );
+      onModelChange("tech_pack_status", "created");
+      onModelChange("updated_at", new Date().toISOString());
+
+      // Clear pending files
+      setImageFile(null);
+      setCloseUpFiles([]);
+      setImagePreview(payload.image_url);
+      setCloseUpPreviews(payload.close_up_images);
+
+      toast.success("تم تحديث الموديل والـ Tech Pack بنجاح ✅");
+    } catch (error) {
+      console.error("UPDATE TECH PACK ERROR:", error);
+      toast.error(error?.message || "حدث خطأ أثناء تحديث الموديل والـ Tech Pack");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
   // ==========================================
   // Return
   // ==========================================
