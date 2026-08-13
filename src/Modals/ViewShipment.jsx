@@ -1,14 +1,11 @@
 import {
   X,
-  FileText,
-  Send,
   Truck,
   PackageCheck,
   Box,
   RefreshCw,
   Printer,
   Layers,
-  Boxes,
   AlertTriangle,
 } from "lucide-react";
 import React, { useState, useEffect, useRef, forwardRef } from "react";
@@ -44,11 +41,6 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
     delivered: "bg-emerald-100 text-emerald-700 border-emerald-200",
   };
 
-  const shippingTypeToDisplay = {
-    quantity: "بالكمية",
-    series: "بالسريهات",
-  };
-
   useEffect(() => {
     setIsOpen(true);
 
@@ -69,25 +61,18 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
     setIsLoading(true);
 
     try {
-      // ==========================================
-      // 1. جلب المقاسات
-      // ==========================================
-
-      const { data: sizesData } = await supabase
+      const { data: sizesData, error: sizesError } = await supabase
         .from("sizes")
-        .select("id, name");
+        .select("id, name, sort_order")
+        .order("sort_order", { ascending: true });
+
+      if (sizesError) throw sizesError;
 
       const sizeMap = {};
 
-      if (sizesData) {
-        sizesData.forEach((s) => {
-          sizeMap[s.id] = s.name;
-        });
-      }
-
-      // ==========================================
-      // 2. جلب بيانات الشحنة
-      // ==========================================
+      sizesData?.forEach((size) => {
+        sizeMap[size.id] = size.name;
+      });
 
       const { data, error } = await supabase
         .from("shipments")
@@ -96,7 +81,6 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
             id,
             shipment_number,
             status,
-            shipping_type,
             series_count,
             broken_qty,
             combined_qty,
@@ -117,12 +101,13 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
             ),
 
             shipment_items (
+              id,
               quantity,
               inventory_id,
 
               inventory (
+                id,
                 size,
-                color,
                 available_qty,
                 models (
                   id,
@@ -130,6 +115,20 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
                   model_number,
                   collection_id
                 )
+              )
+            ),
+
+            shipment_broken_items (
+              id,
+              model_id,
+              inventory_id,
+              size,
+              quantity,
+
+              models (
+                id,
+                name,
+                model_number
               )
             )
           `,
@@ -139,22 +138,64 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
 
       if (error) throw error;
 
-      // ==========================================
-      // 3. ترجمة المقاسات
-      // ==========================================
+      const shipmentItems = data?.shipment_items || [];
+      const brokenItems = data?.shipment_broken_items || [];
 
-      if (data?.shipment_items) {
-        data.shipment_items = data.shipment_items.map((item) => {
-          if (item.inventory) {
-            item.inventory.realSizeName =
-              sizeMap[item.inventory.size] || item.inventory.size;
-          }
+      const modelMap = {};
 
-          return item;
-        });
-      }
+      shipmentItems.forEach((item) => {
+        const model = item.inventory?.models;
 
-      setShipmentDetails(data);
+        if (!model) return;
+
+        const modelId = model.id;
+
+        if (!modelMap[modelId]) {
+          modelMap[modelId] = {
+            id: model.id,
+            name: model.name,
+            model_number: model.model_number,
+            sizes: {},
+          };
+        }
+
+        const sizeId = item.inventory?.size;
+
+        if (!sizeId) return;
+
+        const sizeName = sizeMap[sizeId] || sizeId;
+        const quantity = Number(item.quantity) || 0;
+
+        if (!modelMap[modelId].sizes[sizeId]) {
+          modelMap[modelId].sizes[sizeId] = {
+            id: sizeId,
+            name: sizeName,
+            quantity: 0,
+          };
+        }
+
+        modelMap[modelId].sizes[sizeId].quantity += quantity;
+      });
+
+      const models = Object.values(modelMap).map((model) => ({
+        ...model,
+        sizes: Object.values(model.sizes),
+      }));
+
+      const formattedBrokenItems = brokenItems.map((item) => ({
+        id: item.id,
+        model_id: item.model_id,
+        model_name: item.models?.name || "غير محدد",
+        model_number: item.models?.model_number || "",
+        size: sizeMap[item.size] || item.size,
+        quantity: Number(item.quantity) || 0,
+      }));
+
+      setShipmentDetails({
+        ...data,
+        models,
+        brokenItems: formattedBrokenItems,
+      });
     } catch (error) {
       console.error("Error fetching shipment details:", error);
 
@@ -164,42 +205,48 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
     }
   };
 
-  // ==========================================
-  // إجمالي القطع الفعلي داخل الشحنة
-  // ==========================================
+  const getSeriesCount = () => {
+    return Number(shipmentDetails?.series_count) || 0;
+  };
 
-  const getTotalQuantity = () => {
-    if (!shipmentDetails?.shipment_items) return 0;
+  const getModelsCount = () => {
+    return shipmentDetails?.models?.length || 0;
+  };
 
-    return shipmentDetails.shipment_items.reduce(
+  const getSizesCount = () => {
+    const sizes = new Set();
+
+    shipmentDetails?.models?.forEach((model) => {
+      model.sizes?.forEach((size) => {
+        sizes.add(size.id);
+      });
+    });
+
+    return sizes.size;
+  };
+
+  const getBasePieces = () => {
+    const seriesCount = getSeriesCount();
+
+    if (!shipmentDetails?.models?.length) return 0;
+
+    return shipmentDetails.models.reduce((total, model) => {
+      return total + (model.sizes?.length || 0) * seriesCount;
+    }, 0);
+  };
+
+  const getBrokenPieces = () => {
+    if (!shipmentDetails?.brokenItems) return 0;
+
+    return shipmentDetails.brokenItems.reduce(
       (total, item) => total + (Number(item.quantity) || 0),
       0,
     );
   };
 
-  // ==========================================
-  // عدد الموديلات المختلفة
-  // ==========================================
-
-  const getModelsCount = () => {
-    if (!shipmentDetails?.shipment_items) return 0;
-
-    const models = new Set();
-
-    shipmentDetails.shipment_items.forEach((item) => {
-      const modelId = item.inventory?.models?.id;
-
-      if (modelId) {
-        models.add(modelId);
-      }
-    });
-
-    return models.size;
+  const getCombinedPieces = () => {
+    return getBasePieces() + getBrokenPieces();
   };
-
-  // ==========================================
-  // تحديث حالة الشحنة
-  // ==========================================
 
   const handleUpdateStatus = async (newStatus) => {
     setIsUpdating(true);
@@ -214,30 +261,34 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
 
       if (error) throw error;
 
-      // عند خروج الشحنة فعلياً يتم تحويل المحجوز إلى مشحون
       if (
         shipmentDetails.status === "preparing" &&
         (newStatus === "shipped" || newStatus === "delivered")
       ) {
-        for (const item of shipmentDetails.shipment_items) {
-          const { data: invData } = await supabase
+        for (const item of shipmentDetails.shipment_items || []) {
+          const { data: invData, error: invError } = await supabase
             .from("inventory")
             .select("reserved_qty, shipped_qty")
             .eq("id", item.inventory_id)
             .single();
 
+          if (invError) throw invError;
+
           if (invData) {
-            await supabase
+            const quantity = Number(item.quantity) || 0;
+
+            const { error: updateError } = await supabase
               .from("inventory")
               .update({
                 reserved_qty: Math.max(
                   0,
-                  (invData.reserved_qty || 0) - item.quantity,
+                  (invData.reserved_qty || 0) - quantity,
                 ),
-
-                shipped_qty: (invData.shipped_qty || 0) + item.quantity,
+                shipped_qty: (invData.shipped_qty || 0) + quantity,
               })
               .eq("id", item.inventory_id);
+
+            if (updateError) throw updateError;
           }
         }
       }
@@ -263,15 +314,15 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
 
   if (!shipment) return null;
 
-  const totalQuantity = getTotalQuantity();
+  const seriesCount = getSeriesCount();
   const modelsCount = getModelsCount();
+  const sizesCount = getSizesCount();
+  const basePieces = getBasePieces();
+  const brokenPieces = getBrokenPieces();
+  const combinedPieces = getCombinedPieces();
 
   return (
     <div className="font-arabic" dir="rtl">
-      {/* ==========================================
-          Overlay
-      ========================================== */}
-
       <div
         onClick={closeModal}
         className={`fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300 ${
@@ -279,22 +330,14 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
         }`}
       />
 
-      {/* ==========================================
-          Modal
-      ========================================== */}
-
       <div
-        className={`fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[95%] max-w-3xl -translate-x-1/2 -translate-y-1/2 flex-col rounded-[2rem] bg-white shadow-2xl transition-all duration-300 ${
+        className={`fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[95%] max-w-5xl -translate-x-1/2 -translate-y-1/2 flex-col rounded-[2rem] bg-white shadow-2xl transition-all duration-300 ${
           isOpen ? "scale-100 opacity-100" : "scale-95 opacity-0"
         }`}
       >
-        {/* ==========================================
-            Header
-        ========================================== */}
-
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 p-6 bg-slate-50 rounded-t-[2rem]">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 p-6 rounded-t-[2rem]">
           <div className="flex items-center gap-4">
-            <div className="bg-[#1a365d]/10 p-3 rounded-xl text-[#1a365d]">
+            <div className="rounded-xl bg-[#1a365d]/10 p-3 text-[#1a365d]">
               <Truck size={24} />
             </div>
 
@@ -306,7 +349,7 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
 
                 {shipmentDetails && (
                   <span
-                    className={`px-3 py-1 border rounded-md text-xs font-bold ${
+                    className={`rounded-md border px-3 py-1 text-xs font-bold ${
                       statusColors[shipmentDetails.status]
                     }`}
                   >
@@ -315,41 +358,31 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
                 )}
               </div>
 
-              <p className="text-sm text-slate-500 font-medium mt-1">
-                تفاصيل الشحنة والموديلات والكميات المرفقة بها.
+              <p className="mt-1 text-sm font-medium text-slate-500">
+                تفاصيل الشحنة والسريهات والمقاسات والمكسر.
               </p>
             </div>
           </div>
 
           <button
             onClick={closeModal}
-            className="rounded-xl p-2.5 bg-white border border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-600 transition shadow-sm"
+            className="rounded-xl border border-slate-200 bg-white p-2.5 text-slate-400 shadow-sm transition hover:bg-red-50 hover:text-red-600"
           >
             <X size={20} />
           </button>
         </div>
 
-        {/* ==========================================
-            Body
-        ========================================== */}
-
         <div className="flex-1 overflow-y-auto p-6">
           {isLoading ? (
-            <div className="flex items-center justify-center py-20 text-[#1a365d] font-bold">
-              <RefreshCw className="animate-spin ml-2" size={20} />
+            <div className="flex items-center justify-center py-20 font-bold text-[#1a365d]">
+              <RefreshCw className="ml-2 animate-spin" size={20} />
               جاري تحميل التفاصيل...
             </div>
           ) : (
             <>
-              {/* ==========================================
-                  Quick Info Grid
-              ========================================== */}
-
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-                {/* البراند */}
-
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                  <p className="text-xs text-slate-400 font-bold mb-1">
+              <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3">
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="mb-1 text-xs font-bold text-slate-400">
                     البراند
                   </p>
 
@@ -358,10 +391,8 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
                   </p>
                 </div>
 
-                {/* العميل */}
-
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                  <p className="text-xs text-slate-400 font-bold mb-1">
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="mb-1 text-xs font-bold text-slate-400">
                     العميل المستلم
                   </p>
 
@@ -370,10 +401,8 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
                   </p>
                 </div>
 
-                {/* شركة الشحن */}
-
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                  <p className="text-xs text-slate-400 font-bold mb-1">
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="mb-1 text-xs font-bold text-slate-400">
                     شركة الشحن
                   </p>
 
@@ -382,10 +411,8 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
                   </p>
                 </div>
 
-                {/* العنوان */}
-
-                <div className="md:col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <p className="text-xs text-slate-400 font-bold mb-1">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+                  <p className="mb-1 text-xs font-bold text-slate-400">
                     المحافظة / العنوان
                   </p>
 
@@ -396,15 +423,13 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
                   </p>
                 </div>
 
-                {/* AWB */}
-
-                <div className="md:col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <p className="text-xs text-slate-400 font-bold mb-1">
-                    رقم التتبع (AWB)
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="mb-1 text-xs font-bold text-slate-400">
+                    رقم التتبع
                   </p>
 
                   <p
-                    className="font-mono font-bold text-slate-800 text-left"
+                    className="text-left font-mono font-bold text-slate-800"
                     dir="ltr"
                   >
                     {shipmentDetails?.tracking_number || "لا يوجد"}
@@ -412,241 +437,268 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
                 </div>
               </div>
 
-              {/* ==========================================
-                  بيانات طريقة الشحن الجديدة
-              ========================================== */}
-
               <div className="mb-8">
-                <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-900">
                   <Layers size={18} className="text-[#1a365d]" />
-                  تفاصيل طريقة الشحن
+                  ملخص السريهات
                 </h3>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {/* طريقة الشحن */}
-
-                  <div
-                    className={`p-4 rounded-xl border ${
-                      shipmentDetails?.shipping_type === "series"
-                        ? "bg-blue-50 border-blue-200"
-                        : "bg-slate-50 border-slate-200"
-                    }`}
-                  >
-                    <p className="text-xs text-slate-500 font-bold mb-2">
-                      طريقة الشحن
-                    </p>
-
-                    <div className="flex items-center gap-2">
-                      <Layers
-                        size={18}
-                        className={
-                          shipmentDetails?.shipping_type === "series"
-                            ? "text-blue-600"
-                            : "text-slate-600"
-                        }
-                      />
-
-                      <p className="font-black text-[#1a365d]">
-                        {shippingTypeToDisplay[
-                          shipmentDetails?.shipping_type
-                        ] || "بالكمية"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* السريهات */}
-
-                  <div className="p-4 rounded-xl border border-blue-200 bg-blue-50">
-                    <p className="text-xs text-blue-600 font-bold mb-2">
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                    <p className="mb-2 text-xs font-bold text-blue-600">
                       عدد السريهات
                     </p>
 
                     <p className="text-2xl font-black text-blue-700">
-                      {Number(shipmentDetails?.series_count) || 0}
+                      {seriesCount.toLocaleString("ar-EG")}
                     </p>
 
-                    <p className="text-[10px] text-blue-500 font-bold mt-1">
+                    <p className="mt-1 text-[10px] font-bold text-blue-500">
                       سري
                     </p>
                   </div>
 
-                  {/* المكسر */}
-
-                  <div className="p-4 rounded-xl border border-red-200 bg-red-50">
-                    <p className="text-xs text-red-600 font-bold mb-2">
-                      المكسر
-                    </p>
-
-                    <p className="text-2xl font-black text-red-700">
-                      {Number(shipmentDetails?.broken_qty) || 0}
-                    </p>
-
-                    <p className="text-[10px] text-red-500 font-bold mt-1">
-                      قطعة
-                    </p>
-                  </div>
-
-                  {/* المجمع */}
-
-                  <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
-                    <p className="text-xs text-emerald-600 font-bold mb-2">
-                      المجمع
-                    </p>
-
-                    <p className="text-2xl font-black text-emerald-700">
-                      {Number(shipmentDetails?.combined_qty) || 0}
-                    </p>
-
-                    <p className="text-[10px] text-emerald-500 font-bold mt-1">
-                      سري + مكسر
-                    </p>
-                  </div>
-                </div>
-
-                {/* ملخص الشحنة */}
-
-                <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <div className="rounded-xl bg-slate-100 border border-slate-200 p-4 text-center">
-                    <p className="text-xs text-slate-500 font-bold mb-1">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="mb-2 text-xs font-bold text-slate-500">
                       عدد الموديلات
                     </p>
 
-                    <p className="text-xl font-black text-[#1a365d]">
-                      {modelsCount}
+                    <p className="text-2xl font-black text-[#1a365d]">
+                      {modelsCount.toLocaleString("ar-EG")}
+                    </p>
+
+                    <p className="mt-1 text-[10px] font-bold text-slate-400">
+                      موديل
                     </p>
                   </div>
 
-                  <div className="rounded-xl bg-slate-100 border border-slate-200 p-4 text-center">
-                    <p className="text-xs text-slate-500 font-bold mb-1">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="mb-2 text-xs font-bold text-slate-500">
+                      عدد المقاسات
+                    </p>
+
+                    <p className="text-2xl font-black text-[#1a365d]">
+                      {sizesCount.toLocaleString("ar-EG")}
+                    </p>
+
+                    <p className="mt-1 text-[10px] font-bold text-slate-400">
+                      مقاس
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                    <p className="mb-2 text-xs font-bold text-indigo-600">
+                      القطع الأساسية
+                    </p>
+
+                    <p className="text-2xl font-black text-indigo-700">
+                      {basePieces.toLocaleString("ar-EG")}
+                    </p>
+
+                    <p className="mt-1 text-[10px] font-bold text-indigo-500">
+                      سري × موديلات × مقاسات
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                    <p className="mb-2 text-xs font-bold text-emerald-600">
                       إجمالي القطع
                     </p>
 
-                    <p className="text-xl font-black text-[#1a365d]">
-                      {totalQuantity.toLocaleString("ar-EG")}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl bg-slate-100 border border-slate-200 p-4 text-center col-span-2 md:col-span-1">
-                    <p className="text-xs text-slate-500 font-bold mb-1">
-                      المجمع المسجل
+                    <p className="text-2xl font-black text-emerald-700">
+                      {combinedPieces.toLocaleString("ar-EG")}
                     </p>
 
-                    <p className="text-xl font-black text-emerald-700">
-                      {(
-                        Number(shipmentDetails?.combined_qty) || 0
-                      ).toLocaleString("ar-EG")}
+                    <p className="mt-1 text-[10px] font-bold text-emerald-500">
+                      الأساسي + المكسر
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* ==========================================
-                  Items Table
-              ========================================== */}
-
-              <div>
-                <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                  <Box size={18} className="text-slate-400" />
-                  الموديلات والمقاسات المشحونة
+              <div className="mb-8">
+                <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-900">
+                  <Box size={18} className="text-[#1a365d]" />
+                  تفاصيل السريهات حسب الموديل والمقاس
                 </h3>
 
-                <div className="rounded-2xl border border-slate-200 overflow-hidden">
-                  <table className="w-full text-sm text-right">
-                    <thead className="bg-[#1a365d] text-white">
-                      <tr>
-                        <th className="p-4 font-bold">الموديل</th>
+                <div className="space-y-4">
+                  {shipmentDetails?.models?.length > 0 ? (
+                    shipmentDetails.models.map((model) => (
+                      <div
+                        key={model.id}
+                        className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                      >
+                        <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="font-bold text-slate-900">
+                              {model.name || "غير محدد"}
+                            </p>
 
-                        <th className="p-4 font-bold">اللون / المقاس</th>
+                            {model.model_number && (
+                              <p className="mt-1 text-xs text-slate-400">
+                                كود الموديل: {model.model_number}
+                              </p>
+                            )}
+                          </div>
 
-                        <th className="p-4 font-bold">الكمية</th>
-                      </tr>
-                    </thead>
+                          <div className="rounded-lg bg-blue-100 px-3 py-2 text-center">
+                            <p className="text-[10px] font-bold text-blue-600">
+                              إجمالي الموديل
+                            </p>
 
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {shipmentDetails?.shipment_items?.length > 0 ? (
-                        shipmentDetails.shipment_items.map((item, idx) => (
-                          <tr
-                            key={idx}
-                            className="hover:bg-slate-50 transition-colors"
-                          >
-                            <td className="p-4">
-                              <div className="font-bold text-slate-800">
-                                {item.inventory?.models?.name || "غير محدد"}
+                            <p className="font-black text-blue-700">
+                              {(
+                                (model.sizes?.length || 0) * seriesCount
+                              ).toLocaleString("ar-EG")}{" "}
+                              قطعة
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 md:grid-cols-5">
+                          {model.sizes?.map((size) => (
+                            <div
+                              key={size.id}
+                              className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center"
+                            >
+                              <p className="text-xs font-bold text-slate-500">
+                                مقاس
+                              </p>
+
+                              <p className="mt-1 font-black text-[#1a365d]">
+                                {size.name}
+                              </p>
+
+                              <div className="mt-2 border-t border-slate-200 pt-2">
+                                <p className="text-[10px] text-slate-400">
+                                  الكمية
+                                </p>
+
+                                <p className="font-black text-blue-700">
+                                  {size.quantity.toLocaleString("ar-EG")}
+                                </p>
+
+                                <p className="text-[10px] text-slate-400">
+                                  قطعة
+                                </p>
                               </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center font-medium text-slate-500">
+                      لا توجد تفاصيل للموديلات في هذه الشحنة.
+                    </div>
+                  )}
+                </div>
+              </div>
 
-                              {item.inventory?.models?.model_number && (
-                                <div className="text-xs text-slate-400 mt-1">
-                                  كود الموديل:{" "}
-                                  {item.inventory.models.model_number}
-                                </div>
+              <div className="mb-8">
+                <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-900">
+                  <AlertTriangle size={18} className="text-red-600" />
+                  تفاصيل المكسر
+                </h3>
+
+                {shipmentDetails?.brokenItems?.length > 0 ? (
+                  <div className="overflow-hidden rounded-2xl border border-red-200">
+                    <table className="w-full text-right text-sm">
+                      <thead className="bg-red-50 text-red-800">
+                        <tr>
+                          <th className="p-4 font-bold">الموديل</th>
+                          <th className="p-4 font-bold">المقاس</th>
+                          <th className="p-4 font-bold">الكمية</th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-red-100 bg-white">
+                        {shipmentDetails.brokenItems.map((item) => (
+                          <tr key={item.id}>
+                            <td className="p-4">
+                              <p className="font-bold text-slate-800">
+                                {item.model_name}
+                              </p>
+
+                              {item.model_number && (
+                                <p className="mt-1 text-xs text-slate-400">
+                                  {item.model_number}
+                                </p>
                               )}
                             </td>
 
-                            <td className="p-4 font-semibold text-slate-600">
-                              {item.inventory?.color || "غير محدد"}
-                              {" / "}
-                              مقاس {item.inventory?.realSizeName || "غير محدد"}
+                            <td className="p-4 font-bold text-slate-700">
+                              {item.size}
                             </td>
 
-                            <td className="p-4 font-bold text-[#1a365d]">
-                              {Number(item.quantity || 0).toLocaleString(
-                                "ar-EG",
-                              )}{" "}
-                              قطعة
+                            <td className="p-4 font-black text-red-700">
+                              {item.quantity.toLocaleString("ar-EG")} قطعة
                             </td>
                           </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td
-                            colSpan="3"
-                            className="p-8 text-center text-slate-500 bg-slate-50 font-medium"
-                          >
-                            لا توجد موديلات مسجلة لهذه الشحنة.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
+                        ))}
+                      </tbody>
 
-                    {shipmentDetails?.shipment_items?.length > 0 && (
                       <tfoot>
-                        <tr className="bg-slate-100">
+                        <tr className="bg-red-50">
                           <td
                             colSpan="2"
-                            className="p-4 text-left font-black text-slate-700"
+                            className="p-4 font-black text-red-800"
                           >
-                            إجمالي القطع
+                            إجمالي المكسر
                           </td>
 
-                          <td className="p-4 font-black text-[#1a365d]">
-                            {totalQuantity.toLocaleString("ar-EG")} قطعة
+                          <td className="p-4 font-black text-red-700">
+                            {brokenPieces.toLocaleString("ar-EG")} قطعة
                           </td>
                         </tr>
                       </tfoot>
-                    )}
-                  </table>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center font-medium text-slate-500">
+                    لا يوجد مكسر مسجل في هذه الشحنة.
+                  </div>
+                )}
+              </div>
+
+              <div className="mb-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-emerald-700">
+                      إجمالي القطع في الشحنة
+                    </p>
+
+                    <p className="mt-1 text-xs text-emerald-600">
+                      السريهات الأساسية + القطع المكسرة
+                    </p>
+                  </div>
+
+                  <div className="text-left">
+                    <p className="text-3xl font-black text-emerald-700">
+                      {combinedPieces.toLocaleString("ar-EG")}
+                    </p>
+
+                    <p className="text-xs font-bold text-emerald-600">قطعة</p>
+                  </div>
                 </div>
               </div>
 
-              {/* ==========================================
-                  Status Update Actions
-              ========================================== */}
-
-              <div className="mt-8 p-5 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:flex-row">
                 <div>
                   <p className="font-bold text-slate-800">تحديث حالة الشحنة</p>
 
-                  <p className="text-xs text-slate-500 mt-1">
-                    قم بتغيير الحالة عند استلام المندوب أو تسليم العميل.
+                  <p className="mt-1 text-xs text-slate-500">
+                    قم بتغيير الحالة عند خروج الشحنة أو تأكيد التسليم.
                   </p>
                 </div>
 
-                <div className="flex gap-2 w-full sm:w-auto">
+                <div className="flex w-full gap-2 sm:w-auto">
                   {shipmentDetails?.status === "preparing" && (
                     <button
                       onClick={() => handleUpdateStatus("shipped")}
                       disabled={isUpdating}
-                      className="flex-1 sm:flex-none bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-blue-700 transition shadow-sm disabled:opacity-50"
+                      className="flex-1 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50 sm:flex-none"
                     >
                       خروج للشحن 🚚
                     </button>
@@ -656,14 +708,14 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
                     <button
                       onClick={() => handleUpdateStatus("delivered")}
                       disabled={isUpdating}
-                      className="flex-1 sm:flex-none bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-emerald-700 transition shadow-sm disabled:opacity-50"
+                      className="flex-1 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50 sm:flex-none"
                     >
                       تأكيد التسليم ✅
                     </button>
                   )}
 
                   {shipmentDetails?.status === "delivered" && (
-                    <span className="flex items-center gap-2 text-emerald-600 font-bold bg-emerald-50 px-5 py-2.5 rounded-xl border border-emerald-200">
+                    <span className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-2.5 font-bold text-emerald-600">
                       <PackageCheck size={18} />
                       تمت العملية بنجاح
                     </span>
@@ -674,33 +726,23 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
           )}
         </div>
 
-        {/* ==========================================
-            Footer Actions
-        ========================================== */}
-
-        <div className="flex shrink-0 flex-wrap justify-between gap-3 border-t border-slate-200 p-6 bg-white rounded-b-[2rem]">
-          <div className="flex flex-1 sm:flex-none gap-2">
-            <button
-              onClick={handlePrint}
-              className="flex flex-1 justify-center items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition shadow-sm"
-            >
-              <Printer size={18} />
-              تحميل وطباعة PDF
-            </button>
-          </div>
+        <div className="flex shrink-0 flex-wrap justify-between gap-3 rounded-b-[2rem] border-t border-slate-200 bg-white p-6">
+          <button
+            onClick={handlePrint}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:flex-none"
+          >
+            <Printer size={18} />
+            طباعة بوليصة الشحن
+          </button>
 
           <button
             onClick={closeModal}
-            className="flex-1 sm:flex-none rounded-xl bg-slate-900 px-8 py-3 font-bold text-white hover:bg-slate-800 transition shadow-sm"
+            className="flex-1 rounded-xl bg-slate-900 px-8 py-3 font-bold text-white shadow-sm transition hover:bg-slate-800 sm:flex-none"
           >
             إغلاق النافذة
           </button>
         </div>
       </div>
-
-      {/* ==========================================
-          Printable Receipt
-      ========================================== */}
 
       <div style={{ display: "none" }}>
         <PrintableShipmentReceipt
@@ -713,39 +755,39 @@ const ViewShipment = ({ shipment, setOpenModal, onUpdate }) => {
   );
 };
 
-// ============================================================
-// Printable Shipment Receipt
-// ============================================================
-
 const PrintableShipmentReceipt = forwardRef(({ shipment, logo }, ref) => {
   if (!shipment) return null;
 
-  const shippingTypeToDisplay = {
-    quantity: "بالكمية",
-    series: "بالسريهات",
-  };
+  const seriesCount = Number(shipment.series_count) || 0;
 
-  const totalQuantity =
-    shipment.shipment_items?.reduce(
+  const modelsCount = shipment.models?.length || 0;
+
+  const basePieces =
+    shipment.models?.reduce((total, model) => {
+      return total + (model.sizes?.length || 0) * seriesCount;
+    }, 0) || 0;
+
+  const brokenPieces =
+    shipment.brokenItems?.reduce(
       (total, item) => total + (Number(item.quantity) || 0),
       0,
     ) || 0;
 
+  const combinedPieces = basePieces + brokenPieces;
+
   return (
     <div
       ref={ref}
-      className="p-8 font-arabic bg-white text-slate-900"
+      className="bg-white p-8 font-arabic text-slate-900"
       dir="rtl"
     >
-      {/* رأس البوليصة */}
-
-      <div className="border-b-4 border-[#1a365d] pb-6 mb-6 flex justify-between items-center">
+      <div className="mb-6 flex items-center justify-between border-b-4 border-[#1a365d] pb-6">
         <div className="flex items-center gap-4">
           {logo && (
             <img
               src={logo}
               alt="الصحابة"
-              className="w-16 h-16 object-contain rounded-lg border border-slate-200 p-1"
+              className="h-16 w-16 rounded-lg border border-slate-200 object-contain p-1"
             />
           )}
 
@@ -754,35 +796,33 @@ const PrintableShipmentReceipt = forwardRef(({ shipment, logo }, ref) => {
               الصحابة لتصنيع وتصدير الملابس
             </h1>
 
-            <p className="text-xs font-bold text-[#b91c1c] mt-0.5">
+            <p className="mt-0.5 text-xs font-bold text-[#b91c1c]">
               نصنع الجودة بخيوط الثقة
             </p>
           </div>
         </div>
 
-        <div className="text-left bg-slate-50 border border-slate-200 p-3 rounded-xl">
-          <p className="text-xs font-bold text-slate-500">بوليصة شحن وتصدير</p>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-left">
+          <p className="text-xs font-bold text-slate-500">بوليصة شحن</p>
 
-          <p className="text-sm font-black text-[#1a365d] mt-1 font-mono">
+          <p className="mt-1 font-mono text-sm font-black text-[#1a365d]">
             #{shipment.shipment_number}
           </p>
         </div>
       </div>
 
-      {/* تفاصيل العميل والشحن */}
-
-      <div className="grid grid-cols-2 gap-4 mb-6 text-xs">
-        <div className="border border-slate-200 p-4 rounded-xl bg-slate-50">
-          <p className="font-bold text-slate-400 mb-1">
+      <div className="mb-6 grid grid-cols-2 gap-4 text-xs">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="mb-1 font-bold text-slate-400">
             بيانات العميل المستلم:
           </p>
 
-          <p className="font-bold text-slate-900 text-sm">
-            {shipment.customers?.name}
+          <p className="text-sm font-bold text-slate-900">
+            {shipment.customers?.name || "غير محدد"}
           </p>
 
-          <p className="text-slate-600 mt-1">
-            المحافظة: {shipment.customers?.governorate}
+          <p className="mt-1 text-slate-600">
+            المحافظة: {shipment.customers?.governorate || "غير محدد"}
           </p>
 
           <p className="text-slate-600">
@@ -790,25 +830,25 @@ const PrintableShipmentReceipt = forwardRef(({ shipment, logo }, ref) => {
           </p>
         </div>
 
-        <div className="border border-slate-200 p-4 rounded-xl bg-slate-50">
-          <p className="font-bold text-slate-400 mb-1">بيانات الشحن:</p>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="mb-1 font-bold text-slate-400">بيانات الشحن:</p>
 
           <p className="text-slate-700">
             البراند:{" "}
             <span className="font-bold text-[#1a365d]">
-              {shipment.brands?.name_ar}
+              {shipment.brands?.name_ar || "غير محدد"}
             </span>
           </p>
 
-          <p className="text-slate-700 mt-1">
+          <p className="mt-1 text-slate-700">
             شركة الشحن:{" "}
             <span className="font-bold text-slate-900">
               {shipment.shipping_company || "غير محدد"}
             </span>
           </p>
 
-          <p className="text-slate-700 mt-1">
-            رقم التتبع (AWB):{" "}
+          <p className="mt-1 text-slate-700">
+            رقم التتبع:{" "}
             <span className="font-mono font-bold text-slate-900">
               {shipment.tracking_number || "لا يوجد"}
             </span>
@@ -816,133 +856,216 @@ const PrintableShipmentReceipt = forwardRef(({ shipment, logo }, ref) => {
         </div>
       </div>
 
-      {/* ==========================================
-          ملخص طريقة الشحن
-      ========================================== */}
-
       <div className="mb-8">
-        <h3 className="font-bold text-xs text-[#1a365d] mb-2 bg-slate-100 p-2 rounded border-r-4 border-[#1a365d]">
+        <h3 className="mb-2 rounded border-r-4 border-[#1a365d] bg-slate-100 p-2 text-xs font-bold text-[#1a365d]">
           ملخص الشحنة
         </h3>
 
         <div className="grid grid-cols-4 gap-3 text-center">
-          <div className="border border-slate-200 rounded-lg p-3">
-            <p className="text-[10px] text-slate-500 font-bold">طريقة الشحن</p>
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+            <p className="text-[10px] font-bold text-blue-600">عدد السريهات</p>
 
-            <p className="font-black text-[#1a365d] mt-1">
-              {shippingTypeToDisplay[shipment.shipping_type] || "بالكمية"}
+            <p className="mt-1 text-lg font-black text-blue-700">
+              {seriesCount}
             </p>
           </div>
 
-          <div className="border border-blue-200 bg-blue-50 rounded-lg p-3">
-            <p className="text-[10px] text-blue-600 font-bold">السريهات</p>
+          <div className="rounded-lg border border-slate-200 p-3">
+            <p className="text-[10px] font-bold text-slate-500">
+              عدد الموديلات
+            </p>
 
-            <p className="font-black text-blue-700 text-lg mt-1">
-              {shipment.series_count || 0}
+            <p className="mt-1 text-lg font-black text-[#1a365d]">
+              {modelsCount}
             </p>
           </div>
 
-          <div className="border border-red-200 bg-red-50 rounded-lg p-3">
-            <p className="text-[10px] text-red-600 font-bold">المكسر</p>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+            <p className="text-[10px] font-bold text-red-600">المكسر</p>
 
-            <p className="font-black text-red-700 text-lg mt-1">
-              {shipment.broken_qty || 0}
+            <p className="mt-1 text-lg font-black text-red-700">
+              {brokenPieces}
             </p>
           </div>
 
-          <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-3">
-            <p className="text-[10px] text-emerald-600 font-bold">المجمع</p>
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+            <p className="text-[10px] font-bold text-emerald-600">
+              إجمالي القطع
+            </p>
 
-            <p className="font-black text-emerald-700 text-lg mt-1">
-              {shipment.combined_qty || 0}
+            <p className="mt-1 text-lg font-black text-emerald-700">
+              {combinedPieces}
             </p>
           </div>
         </div>
       </div>
 
-      {/* جدول الموديلات المشحونة */}
-
       <div className="mb-8">
-        <h3 className="font-bold text-xs text-[#1a365d] mb-2 bg-slate-100 p-2 rounded border-r-4 border-[#1a365d]">
-          محتويات الشحنة والموديلات
+        <h3 className="mb-2 rounded border-r-4 border-[#1a365d] bg-slate-100 p-2 text-xs font-bold text-[#1a365d]">
+          تفاصيل السريهات حسب الموديل والمقاس
         </h3>
 
-        <table className="w-full text-right text-xs border-collapse border border-slate-300">
+        <table className="w-full border-collapse border border-slate-300 text-right text-xs">
           <thead>
             <tr className="bg-[#1a365d] text-white">
               <th className="border border-slate-300 p-2.5">الموديل</th>
 
-              <th className="border border-slate-300 p-2.5">اللون / المقاس</th>
+              <th className="border border-slate-300 p-2.5">المقاس</th>
 
               <th className="border border-slate-300 p-2.5 text-center">
-                الكمية
+                عدد السريهات
+              </th>
+
+              <th className="border border-slate-300 p-2.5 text-center">
+                القطع
               </th>
             </tr>
           </thead>
 
           <tbody>
-            {shipment.shipment_items?.map((item, idx) => (
-              <tr key={idx}>
-                <td className="border border-slate-300 p-2.5 font-bold text-slate-800">
-                  {item.inventory?.models?.name}
-                </td>
+            {shipment.models?.flatMap((model) =>
+              model.sizes?.map((size) => (
+                <tr key={`${model.id}-${size.id}`}>
+                  <td className="border border-slate-300 p-2.5 font-bold text-slate-800">
+                    {model.name || "غير محدد"}
+                    {model.model_number && (
+                      <span className="mr-2 text-[10px] text-slate-400">
+                        {model.model_number}
+                      </span>
+                    )}
+                  </td>
 
-                <td className="border border-slate-300 p-2.5 text-slate-600">
-                  {item.inventory?.color} / مقاس{" "}
-                  {item.inventory?.realSizeName || item.inventory?.size}
-                </td>
+                  <td className="border border-slate-300 p-2.5 text-slate-600">
+                    {size.name}
+                  </td>
 
-                <td className="border border-slate-300 p-2.5 text-center font-bold text-[#1a365d]">
-                  {item.quantity} قطعة
-                </td>
-              </tr>
-            ))}
+                  <td className="border border-slate-300 p-2.5 text-center font-bold text-blue-700">
+                    {seriesCount}
+                  </td>
+
+                  <td className="border border-slate-300 p-2.5 text-center font-bold text-[#1a365d]">
+                    {size.quantity} قطعة
+                  </td>
+                </tr>
+              )),
+            )}
           </tbody>
 
           <tfoot>
             <tr className="bg-slate-100">
               <td
-                colSpan="2"
+                colSpan="3"
                 className="border border-slate-300 p-2.5 font-black"
               >
-                إجمالي القطع
+                إجمالي القطع الأساسية
               </td>
 
               <td className="border border-slate-300 p-2.5 text-center font-black text-[#1a365d]">
-                {totalQuantity} قطعة
+                {basePieces} قطعة
               </td>
             </tr>
           </tfoot>
         </table>
       </div>
 
-      {/* التوقيعات */}
+      {shipment.brokenItems?.length > 0 && (
+        <div className="mb-8">
+          <h3 className="mb-2 rounded border-r-4 border-red-600 bg-red-50 p-2 text-xs font-bold text-red-700">
+            تفاصيل المكسر
+          </h3>
 
-      <div className="grid grid-cols-2 gap-8 mt-16 pt-8 border-t border-slate-200 text-center text-xs">
+          <table className="w-full border-collapse border border-red-200 text-right text-xs">
+            <thead>
+              <tr className="bg-red-50 text-red-800">
+                <th className="border border-red-200 p-2.5">الموديل</th>
+
+                <th className="border border-red-200 p-2.5">المقاس</th>
+
+                <th className="border border-red-200 p-2.5 text-center">
+                  الكمية
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {shipment.brokenItems.map((item) => (
+                <tr key={item.id}>
+                  <td className="border border-red-200 p-2.5 font-bold">
+                    {item.model_name}
+                  </td>
+
+                  <td className="border border-red-200 p-2.5">{item.size}</td>
+
+                  <td className="border border-red-200 p-2.5 text-center font-black text-red-700">
+                    {item.quantity} قطعة
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+
+            <tfoot>
+              <tr className="bg-red-50">
+                <td
+                  colSpan="2"
+                  className="border border-red-200 p-2.5 font-black"
+                >
+                  إجمالي المكسر
+                </td>
+
+                <td className="border border-red-200 p-2.5 text-center font-black text-red-700">
+                  {brokenPieces} قطعة
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-3 border-t border-slate-200 pt-6 text-center">
         <div>
-          <p className="font-bold text-slate-700 mb-12">
+          <p className="text-xs font-bold text-slate-500">القطع الأساسية</p>
+
+          <p className="mt-1 text-xl font-black text-[#1a365d]">{basePieces}</p>
+        </div>
+
+        <div>
+          <p className="text-xs font-bold text-red-500">المكسر</p>
+
+          <p className="mt-1 text-xl font-black text-red-700">{brokenPieces}</p>
+        </div>
+
+        <div>
+          <p className="text-xs font-bold text-emerald-600">إجمالي القطع</p>
+
+          <p className="mt-1 text-xl font-black text-emerald-700">
+            {combinedPieces}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-16 grid grid-cols-2 gap-8 border-t border-slate-200 pt-8 text-center text-xs">
+        <div>
+          <p className="mb-12 font-bold text-slate-700">
             مسؤول المخزن / التجهيز
           </p>
 
-          <p className="border-t border-slate-400 w-48 mx-auto pt-1 text-slate-400">
+          <p className="mx-auto w-48 border-t border-slate-400 pt-1 text-slate-400">
             التوقيع
           </p>
         </div>
 
         <div>
-          <p className="font-bold text-slate-700 mb-12">
+          <p className="mb-12 font-bold text-slate-700">
             مندوب شركة الشحن / المستلم
           </p>
 
-          <p className="border-t border-slate-400 w-48 mx-auto pt-1 text-slate-400">
+          <p className="mx-auto w-48 border-t border-slate-400 pt-1 text-slate-400">
             التوقيع والاستلام
           </p>
         </div>
       </div>
 
-      {/* تذييل الصفحة */}
-
-      <div className="mt-12 text-center text-[10px] text-slate-400 font-bold">
+      <div className="mt-12 text-center text-[10px] font-bold text-slate-400">
         <p>
           نظام إدارة أوردرات المصنع - الصحابة لتصنيع وتصدير الملابس | بوليصة
           معتمدة
