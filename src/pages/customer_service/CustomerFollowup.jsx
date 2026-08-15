@@ -86,7 +86,6 @@ const CustomerFollowup = () => {
     }
   };
 
-  // 💡 1. دالة إلغاء أمر التشغيل (نهائي)
   const handleCancelProduction = async (orderId) => {
     const confirmCancel = window.confirm(
       "هل أنت متأكد من إلغاء أمر التشغيل لهذا الكولكشن نهائياً؟",
@@ -109,10 +108,7 @@ const CustomerFollowup = () => {
     }
   };
 
-  // 💡 2. دالة الإيقاف المؤقت واستئناف التشغيل (Toggle)
   const handleTogglePauseProduction = async (orderId, currentStatus) => {
-    // لو الحالة حالياً موقوفة، هنرجعها pending (أو in_progress حسب الداتابيز عندك)
-    // ولو شغالة، هنخليها on_hold
     const isCurrentlyPaused = currentStatus === "on_hold";
     const newStatus = isCurrentlyPaused ? "pending" : "on_hold";
 
@@ -184,8 +180,8 @@ const CustomerFollowup = () => {
                 متابعة موافقات العملاء
               </h1>
               <p className="text-xs sm:text-sm text-slate-500">
-                تحديث حالة موافقة العميل على الـ Tech Pack وعرض السعر. لا يرسل
-                الكولكشن إلى التخطيط إلا بعد "تمت الموافقة".
+                تحديث حالة موافقة العميل على الـ Tech Pack وعرض السعر. يمكنك
+                أيضاً فتح ملف التشغيل لطباعة الأوامر والعقود.
               </p>
             </div>
           </div>
@@ -224,7 +220,6 @@ const CustomerFollowup = () => {
             </div>
           ) : (
             filteredCollections.map((collection) => {
-              // 💡 تحديد الحالات بدقة
               const isCompleted =
                 collection.productionOrderStatus === "completed";
               const isSentToPlanning =
@@ -303,7 +298,7 @@ const CustomerFollowup = () => {
                           onClick={() =>
                             handleStatusChange(collection.id, status)
                           }
-                          disabled={isSentToPlanning} // تعطيل الزراير لو راح التخطيط ومش ملغي
+                          disabled={isSentToPlanning}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
                             isSentToPlanning
                               ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
@@ -320,15 +315,23 @@ const CustomerFollowup = () => {
                     <div className="w-full xl:w-auto flex flex-col sm:flex-row justify-end gap-2">
                       {isSentToPlanning ? (
                         isCompleted ? (
-                          // 💡 لو الأوردر خلص، هنظهر زرار مقفول بدل زراير الإيقاف والإلغاء
-                          <button
-                            disabled
-                            className="bg-slate-100 text-slate-400 cursor-not-allowed px-6 py-2.5 rounded-lg text-sm font-bold w-full xl:w-auto border border-slate-200"
+                          // 💡 التعديل هنا: فتح ملف الأوردر للطباعة حتى لو كان مكتمل
+                          <Link
+                            to={`/customer_service/start_order/${collection.id}`}
+                            className="bg-slate-800 text-white hover:bg-slate-900 px-6 py-2.5 rounded-lg text-sm font-bold w-full xl:w-auto text-center border shadow-sm"
                           >
-                            أوردر مكتمل ومغلق
-                          </button>
+                            ملف التشغيل / طباعة 🖨️
+                          </Link>
                         ) : (
                           <>
+                            {/* 💡 التعديل هنا: فتح ملف الأوردر للطباعة وهو قيد التشغيل */}
+                            <Link
+                              to={`/customer_service/start_order/${collection.id}`}
+                              className="bg-slate-800 text-white hover:bg-slate-900 px-4 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-sm w-full xl:w-auto text-center border"
+                            >
+                              ملف التشغيل / طباعة 🖨️
+                            </Link>
+
                             <button
                               onClick={() =>
                                 handleTogglePauseProduction(
@@ -362,14 +365,14 @@ const CustomerFollowup = () => {
                           to={`/customer_service/start_order/${collection.id}`}
                           className="bg-[#b91c1c] hover:bg-red-800 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-sm w-full xl:w-auto text-center flex items-center justify-center gap-2"
                         >
-                          إصدار أمر التشغيل بالكميات ◀
+                          إصدار أمر التشغيل ◀
                         </Link>
                       ) : (
                         <button
                           disabled
                           className="bg-slate-100 text-slate-400 cursor-not-allowed px-6 py-2.5 rounded-lg text-sm font-bold w-full xl:w-auto"
                         >
-                          أمر التشغيل مغلق
+                          يتطلب موافقة أولاً
                         </button>
                       )}
                     </div>

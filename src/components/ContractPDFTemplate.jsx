@@ -125,11 +125,11 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
     fetchBrandRepresentative();
   }, [data?.id]);
-
   if (!data) return null;
 
   let grandTotalQty = 0;
-  let grandTotalValue = 0;
+  let grandTotalValue = 0; // ده إجمالي قيمة العقد الحقيقي اللي هيتكتب في طريقة السداد تحت
+  let sumOfUnitPrices = 0; // 💡 ده مجموع أسعار الوحدة اللي هيظهر في الجدول
 
   const allColors = new Set();
   const allSizes = new Set();
@@ -146,8 +146,11 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
       allSizes.add(safeText(size));
     });
 
-    // 💡 إضافة الإجمالي الخاص بالموديل مباشرة لقيمة العقد الإجمالية
-    grandTotalValue += Number(model.approvedPrice) || 0;
+    // 💡 تجميع سعر الوحدة للجدول
+    const unitPrice = Number(model.approvedPrice) || 0;
+    sumOfUnitPrices += unitPrice;
+
+    let currentModelQty = 0;
 
     variants.forEach((variant) => {
       const part = getVariantPart(variant);
@@ -161,9 +164,13 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
         const quantity =
           Number(seriesCount?.[model.id]?.[variant.variantKey]?.[size]) || 0;
 
+        currentModelQty += quantity;
         grandTotalQty += quantity;
       });
     });
+
+    // 💡 حساب قيمة العقد الإجمالية (الكمية × السعر) عشان الدفعات
+    grandTotalValue += currentModelQty * unitPrice;
   });
 
   const advancePayment = grandTotalValue / 2;
@@ -171,10 +178,6 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
   const dateObj = new Date();
   const dayName = dateObj.toLocaleDateString("ar-EG", { weekday: "long" });
   const formattedDate = dateObj.toLocaleDateString("en-GB");
-
-  /* ========================================================
-       JSX
-    ======================================================== */
 
   return (
     <div
@@ -351,7 +354,7 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
       <table className="table-bordered table-products">
         <thead>
           <tr>
-            <th colSpan="6" className="text-right px-3 py-1.5 text-xs">
+            <th colSpan="5" className="text-right px-3 py-1.5 text-xs">
               موضوع العقد — المنتجات والكميات والأسعار
             </th>
           </tr>
@@ -362,41 +365,25 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
             <th>الخامة</th>
             <th>الكمية (قطعة)</th>
             <th>سعر الوحدة (ج.م)</th>
-            <th>الإجمالي (ج.م)</th>
           </tr>
         </thead>
 
         <tbody>
           {(data.models || []).map((model, idx) => {
             const qty = getModelTotal(model, seriesCount);
-
-            // 💡 السعر الإجمالي اللي جاي من الداتابيز
-            const total = Number(model.approvedPrice) || 0;
-            // 💡 حساب متوسط سعر القطعة الواحدة
-            const unitPrice = qty > 0 ? total / qty : total;
+            const unitPrice = Number(model.approvedPrice) || 0;
 
             return (
               <tr key={model.id || idx}>
                 <td className="val-cell">{safeText(model.model_number)}</td>
-
                 <td className="val-cell">{safeText(model.name)}</td>
-
                 <td className="val-cell">
                   {safeText(model.fabric, "غير محدد")}{" "}
                   {safeText(model.weight, "")}
                 </td>
-
                 <td className="val-cell">{qty}</td>
-
-                <td className="val-cell">
-                  {unitPrice.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </td>
-
                 <td className="val-cell font-black">
-                  {total.toLocaleString(undefined, {
+                  {unitPrice.toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
@@ -406,7 +393,7 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
           })}
 
           <tr className="bg-[#fee2e2]">
-            <td colSpan="5" className="text-center font-bold text-[#b91c1c]">
+            <td colSpan="4" className="text-center font-bold text-[#b91c1c]">
               الإجمالي — {grandTotalQty} قطعة
               {" | "}
               الأجزاء والألوان: {Array.from(allColors).join(" / ")}
@@ -414,8 +401,9 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
               المقاسات: {Array.from(allSizes).join(" - ")}
             </td>
 
+            {/* 💡 التعديل هنا: عرض مجموع أسعار الوحدة فقط */}
             <td className="font-black text-[#b91c1c] text-[11px]">
-              {grandTotalValue.toLocaleString(undefined, {
+              {sumOfUnitPrices.toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}

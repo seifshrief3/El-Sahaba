@@ -1,4 +1,4 @@
-import { X, Plus, Trash2, Box, Layers, Minus, Package } from "lucide-react";
+import { X, Box, Layers, Package } from "lucide-react";
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../supabase";
 import { toast } from "sonner";
@@ -9,7 +9,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
   const [isLoadingCollection, setIsLoadingCollection] = useState(false);
 
   // ============================================================
-  // قوائم البيانات
+  // البيانات الأساسية
   // ============================================================
 
   const [brands, setBrands] = useState([]);
@@ -20,9 +20,38 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
   // بيانات الكولكشن
   // ============================================================
 
-  const [collectionModels, setCollectionModels] = useState([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState("");
+
+  const [collectionModels, setCollectionModels] = useState([]);
   const [selectedCollectionModels, setSelectedCollectionModels] = useState([]);
+
+  // ============================================================
+  // أمر التشغيل
+  // ============================================================
+
+  const [productionOrder, setProductionOrder] = useState(null);
+
+  /*
+    productionOrderItems الشكل المتوقع:
+
+    {
+      id,
+      model_id,
+      variant_key,
+      total_quantity,
+      part,
+      color,
+      sizeRows: [
+        {
+          size_id,
+          size_name,
+          quantity
+        }
+      ]
+    }
+  */
+
+  const [productionOrderItems, setProductionOrderItems] = useState([]);
 
   // ============================================================
   // السريهات
@@ -32,15 +61,6 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
   // ============================================================
   // المكسر
-  //
-  // كل عنصر:
-  // {
-  //   model_id,
-  //   model_number,
-  //   model_name,
-  //   size,
-  //   quantity
-  // }
   // ============================================================
 
   const [brokenItems, setBrokenItems] = useState([]);
@@ -113,7 +133,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
   };
 
   // ============================================================
-  // عند تغيير البراند
+  // تغيير البراند
   // ============================================================
 
   useEffect(() => {
@@ -123,6 +143,8 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
       setSelectedCollectionId("");
       setCollectionModels([]);
       setSelectedCollectionModels([]);
+      setProductionOrder(null);
+      setProductionOrderItems([]);
       setBrokenItems([]);
       setSeriesToShip("");
       return;
@@ -161,10 +183,12 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
       setCollections(collectionsData || []);
 
-      // Reset collection selection
+      // Reset
       setSelectedCollectionId("");
       setCollectionModels([]);
       setSelectedCollectionModels([]);
+      setProductionOrder(null);
+      setProductionOrderItems([]);
       setBrokenItems([]);
       setSeriesToShip("");
     };
@@ -173,7 +197,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
   }, [formData.brand_id]);
 
   // ============================================================
-  // جلب موديلات الكولكشن + المقاسات
+  // تحميل الكولكشن + أمر التشغيل
   // ============================================================
 
   const handleCollectionChange = async (e) => {
@@ -184,6 +208,8 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
     setBrokenItems([]);
     setSeriesToShip("");
     setCollectionModels([]);
+    setProductionOrder(null);
+    setProductionOrderItems([]);
 
     if (!collectionId) return;
 
@@ -206,14 +232,12 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
       if (!modelsData || modelsData.length === 0) {
         setCollectionModels([]);
+        toast.warning("لا توجد موديلات في هذا الكولكشن.");
         return;
       }
 
       // ========================================================
       // 2. جلب المقاسات
-      //
-      // inventory.size ممكن يكون ID للمقاس أو اسم المقاس
-      // لذلك بنجيب جدول sizes علشان نعرض الاسم الصحيح.
       // ========================================================
 
       const { data: sizesData, error: sizesError } = await supabase
@@ -240,87 +264,161 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
       });
 
       // ========================================================
-      // 3. جلب مخزون الموديلات
-      //
-      // الألوان لن تدخل في الحساب.
-      // لكن لازم نجيبها مؤقتًا علشان نعرف منين نخصم المخزون.
+      // 3. جلب أمر التشغيل
       // ========================================================
 
-      const modelIds = modelsData.map((model) => model.id);
-
-      const { data: inventoryData, error: inventoryError } = await supabase
-        .from("inventory")
+      const { data: orderData, error: orderError } = await supabase
+        .from("production_orders")
         .select(
           `
-              id,
-              model_id,
-              size,
-              color,
-              available_qty,
-              reserved_qty,
-              shipped_qty
-            `,
+            id,
+            collection_id,
+            order_number,
+            status,
+            total_quantity,
+            total_amount
+          `,
         )
-        .in("model_id", modelIds)
-        .gt("available_qty", 0);
+        .eq("collection_id", collectionId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (inventoryError) {
-        throw inventoryError;
+      if (orderError) {
+        throw orderError;
       }
 
-      // ========================================================
-      // 4. تجهيز موديلات الكولكشن
-      // ========================================================
+      if (!orderData) {
+        toast.error("لا يوجد أمر تشغيل لهذا الكولكشن.");
+        setProductionOrder(null);
+        setProductionOrderItems([]);
+      } else {
+        setProductionOrder(orderData);
 
-      const modelsWithSizes = modelsData.map((model) => {
-        const modelInventory = (inventoryData || []).filter(
-          (item) => item.model_id === model.id,
-        );
+        // ======================================================
+        // 4. جلب Production Order Items
+        // ======================================================
 
-        // ------------------------------------------------------
-        // تجميع المقاسات
-        // اللون يتم تجاهله هنا.
-        // ------------------------------------------------------
+        const { data: orderItemsData, error: orderItemsError } = await supabase
+          .from("production_order_items")
+          .select(
+            `
+                id,
+                production_order_id,
+                model_id,
+                variant_key,
+                selling_price,
+                total_quantity,
+                part,
+                color
+              `,
+          )
+          .eq("production_order_id", orderData.id);
 
-        const sizeMapForModel = {};
+        if (orderItemsError) {
+          throw orderItemsError;
+        }
 
-        modelInventory.forEach((item) => {
-          const rawSize = String(item.size);
+        const itemIds = (orderItemsData || []).map((item) => item.id);
 
-          const sizeInfo = sizeMap[rawSize];
+        // ======================================================
+        // 5. جلب كميات المقاسات من أمر التشغيل
+        // ======================================================
 
-          const sizeName = sizeInfo?.name || rawSize;
+        let orderSizeRows = [];
 
-          if (!sizeMapForModel[sizeName]) {
-            sizeMapForModel[sizeName] = {
-              name: sizeName,
-              sort_order: sizeInfo?.sort_order ?? 999,
-            };
+        if (itemIds.length > 0) {
+          const { data: sizeRowsData, error: sizeRowsError } = await supabase
+            .from("production_order_item_sizes")
+            .select(
+              `
+                  id,
+                  production_order_item_id,
+                  size_id,
+                  quantity
+                `,
+            )
+            .in("production_order_item_id", itemIds);
+
+          if (sizeRowsError) {
+            throw sizeRowsError;
           }
+
+          orderSizeRows = sizeRowsData || [];
+        }
+
+        // ======================================================
+        // 6. ربط المقاسات بالـ Items
+        // ======================================================
+
+        const preparedOrderItems = (orderItemsData || []).map((item) => {
+          const sizeRows = orderSizeRows
+            .filter((row) => row.production_order_item_id === item.id)
+            .map((row) => {
+              const sizeInfo = sizeMap[String(row.size_id)];
+
+              return {
+                size_id: row.size_id,
+                size_name: sizeInfo?.name || String(row.size_id),
+                quantity: Number(row.quantity || 0),
+                sort_order: sizeInfo?.sort_order ?? 999,
+              };
+            })
+            .sort((a, b) => a.sort_order - b.sort_order);
+
+          return {
+            ...item,
+            sizeRows,
+          };
         });
 
-        const sizes = Object.values(sizeMapForModel).sort(
-          (a, b) => a.sort_order - b.sort_order,
-        );
+        setProductionOrderItems(preparedOrderItems);
 
-        return {
-          ...model,
-          sizes,
-          sizeCount: sizes.length,
-        };
-      });
+        // ======================================================
+        // 7. تجهيز الموديلات للعرض
+        // ======================================================
 
-      setCollectionModels(modelsWithSizes);
+        const modelsWithSizes = modelsData.map((model) => {
+          const modelItems = preparedOrderItems.filter(
+            (item) => item.model_id === model.id,
+          );
+
+          const sizeMapForModel = {};
+
+          modelItems.forEach((item) => {
+            item.sizeRows.forEach((sizeRow) => {
+              if (!sizeMapForModel[sizeRow.size_name]) {
+                sizeMapForModel[sizeRow.size_name] = {
+                  name: sizeRow.size_name,
+                  sort_order: sizeRow.sort_order,
+                };
+              }
+            });
+          });
+
+          const sizes = Object.values(sizeMapForModel).sort(
+            (a, b) => a.sort_order - b.sort_order,
+          );
+
+          return {
+            ...model,
+            sizes,
+            sizeCount: sizes.length,
+          };
+        });
+
+        setCollectionModels(modelsWithSizes);
+      }
     } catch (error) {
       console.error("Error loading collection:", error);
-      toast.error("حدث خطأ أثناء تحميل بيانات الكولكشن.");
+      toast.error("حدث خطأ أثناء تحميل بيانات الكولكشن وأمر التشغيل.");
     } finally {
       setIsLoadingCollection(false);
     }
   };
 
   // ============================================================
-  // تحديد / إلغاء تحديد موديل
+  // تحديد موديل
   // ============================================================
 
   const toggleCollectionModel = (modelId) => {
@@ -332,7 +430,6 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
       return [...prev, modelId];
     });
 
-    // عند تغيير الموديلات نمسح المكسر القديم
     setBrokenItems([]);
     setSeriesToShip("");
   };
@@ -363,19 +460,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
   }, [collectionModels, selectedCollectionModels]);
 
   // ============================================================
-  // المقاسات المشتركة بين الموديلات المختارة
-  //
-  // العميل أكد إن المقاسات ثابتة بين موديلات الكولكشن.
-  //
-  // مثال:
-  // Model 1 = S M L XL XXL
-  // Model 2 = S M L XL XXL
-  //
-  // النتيجة:
-  // 5 مقاسات
-  //
-  // لو حصل اختلاف بالخطأ، هنستخدم المقاسات المشتركة فقط
-  // بدل ما النظام يفترض إنهم نفس الحاجة.
+  // المقاسات المشتركة
   // ============================================================
 
   const commonSizes = useMemo(() => {
@@ -393,50 +478,125 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
   }, [selectedModels]);
 
   // ============================================================
-  // عدد سريهات الكولكشن
-  //
-  // IMPORTANT:
-  //
-  // عدد السريهات = عدد الموديلات × عدد المقاسات
-  //
-  // مثال:
-  // 2 موديل × 5 مقاسات = 10 سريهات
-  //
-  // وليس أقل كمية موجودة في المخزون.
+  // الحصول على Items الخاصة بموديل
   // ============================================================
 
-  const totalSeries = useMemo(() => {
-    if (selectedModels.length === 0 || commonSizes.length === 0) {
+  const getProductionItemsForModel = (modelId) => {
+    return productionOrderItems.filter((item) => item.model_id === modelId);
+  };
+
+  // ============================================================
+  // الحصول على كمية أمر التشغيل لموديل + مقاس
+  //
+  // لو عندنا Variant واحد:
+  //
+  // Model 1 / S = 40
+  //
+  // لو عندنا أكثر من Variant:
+  //
+  // Variant 1 / S = 40
+  // Variant 2 / S = 40
+  //
+  // بنستخدم أقل كمية متاحة بينهم كسريهات يمكن شحنها
+  // علشان ما نشحنش Variant أكثر من الموجود في أمر التشغيل.
+  // ============================================================
+
+  const getOrderSeriesForModelSize = (modelId, sizeName) => {
+    const items = getProductionItemsForModel(modelId);
+
+    if (items.length === 0) {
       return 0;
     }
 
-    return selectedModels.length * commonSizes.length;
-  }, [selectedModels, commonSizes]);
+    const quantities = [];
+
+    items.forEach((item) => {
+      const sizeRow = item.sizeRows.find((row) => row.size_name === sizeName);
+
+      if (sizeRow) {
+        quantities.push(Number(sizeRow.quantity || 0));
+      }
+    });
+
+    if (quantities.length === 0) {
+      return 0;
+    }
+
+    return Math.min(...quantities);
+  };
+
+  // ============================================================
+  // إجمالي السريهات المتاحة
+  //
+  // مهم جدًا:
+  //
+  // مش:
+  // models × sizes
+  //
+  // لكن بنجيب عدد السريهات من أمر التشغيل نفسه.
+  //
+  // مثال:
+  //
+  // Model 1:
+  // S = 40
+  // M = 40
+  // ...
+  //
+  // Model 2:
+  // S = 40
+  //
+  // Model 3:
+  // S = 40
+  //
+  // النتيجة = 40 سري.
+  //
+  // بنأخذ MIN بين كل model/size.
+  // ============================================================
+
+  const totalSeries = useMemo(() => {
+    if (
+      selectedModels.length === 0 ||
+      commonSizes.length === 0 ||
+      productionOrderItems.length === 0
+    ) {
+      return 0;
+    }
+
+    const allSeriesValues = [];
+
+    selectedModels.forEach((model) => {
+      commonSizes.forEach((size) => {
+        const quantity = getOrderSeriesForModelSize(model.id, size.name);
+
+        allSeriesValues.push(quantity);
+      });
+    });
+
+    if (allSeriesValues.length === 0) {
+      return 0;
+    }
+
+    return Math.min(...allSeriesValues);
+  }, [selectedModels, commonSizes, productionOrderItems]);
 
   // ============================================================
   // عدد القطع في السري الواحد
   //
-  // السري الواحد يحتوي على:
-  //
-  // Model 1:
-  // S + M + L + XL + XXL = 5 قطع
-  //
-  // Model 2:
-  // S + M + L + XL + XXL = 5 قطع
-  //
-  // الإجمالي = 10 قطع
+  // 3 موديلات × 5 مقاسات = 15 قطعة
   // ============================================================
 
-  const piecesPerSeries = totalSeries;
+  const piecesPerSeries = useMemo(() => {
+    return selectedModels.length * commonSizes.length;
+  }, [selectedModels, commonSizes]);
 
   // ============================================================
-  // عدد السريهات المشحونة
+  // السريهات المطلوبة
   // ============================================================
 
   const requestedSeries = Math.max(0, Math.floor(Number(seriesToShip) || 0));
 
   // ============================================================
-  // عدد السريهات المتبقية
+  // السريهات المتبقية
   // ============================================================
 
   const remainingSeries = Math.max(0, totalSeries - requestedSeries);
@@ -449,8 +609,6 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
   // ============================================================
   // المكسر
-  //
-  // إجمالي المكسر = مجموع كل العناصر.
   // ============================================================
 
   const brokenQty = useMemo(() => {
@@ -462,20 +620,12 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
   // ============================================================
   // المجمع
-  //
-  // المجمع = القطع الناتجة من السريهات + المكسر
-  //
-  // مثال:
-  // 5 سري × 10 قطعة = 50
-  // مكسر = 3
-  //
-  // المجمع = 53 قطعة
   // ============================================================
 
   const combinedQty = seriesPieces + brokenQty;
 
   // ============================================================
-  // إضافة / تعديل كمية المكسر
+  // تعديل كمية المكسر
   // ============================================================
 
   const updateBrokenQuantity = (modelId, modelNumber, modelName, size, qty) => {
@@ -513,7 +663,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
   };
 
   // ============================================================
-  // الحصول على كمية مكسر معينة
+  // كمية مكسر
   // ============================================================
 
   const getBrokenQuantity = (modelId, size) => {
@@ -525,7 +675,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
   };
 
   // ============================================================
-  // التحقق من الشحنة
+  // Validation
   // ============================================================
 
   const validateShipment = () => {
@@ -544,6 +694,11 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
       return false;
     }
 
+    if (!productionOrder) {
+      toast.error("لا يوجد أمر تشغيل لهذا الكولكشن.");
+      return false;
+    }
+
     if (selectedModels.length === 0) {
       toast.error("يرجى اختيار موديل واحد على الأقل.");
       return false;
@@ -554,6 +709,11 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
       return false;
     }
 
+    if (totalSeries <= 0) {
+      toast.error("لا توجد سريهات متاحة في أمر التشغيل.");
+      return false;
+    }
+
     if (requestedSeries <= 0) {
       toast.error("يرجى إدخال عدد السريهات المراد شحنها.");
       return false;
@@ -561,13 +721,8 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
     if (requestedSeries > totalSeries) {
       toast.error(
-        `عدد السريهات المطلوب (${requestedSeries}) أكبر من إجمالي السريهات (${totalSeries}).`,
+        `عدد السريهات المطلوب (${requestedSeries}) أكبر من السريهات المتاحة (${totalSeries}).`,
       );
-      return false;
-    }
-
-    if (brokenQty < 0) {
-      toast.error("قيمة المكسر غير صحيحة.");
       return false;
     }
 
@@ -575,7 +730,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
   };
 
   // ============================================================
-  // توليد رقم الشحنة
+  // رقم الشحنة
   // ============================================================
 
   const generateShipmentNumber = () => {
@@ -598,18 +753,10 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
     setIsSubmitting(true);
 
     try {
-      // ========================================================
-      // رقم الشحنة
-      // ========================================================
-
       const shipmentNumber = generateShipmentNumber();
 
       // ========================================================
       // 1. إنشاء الشحنة
-      //
-      // series_count = عدد السريهات المشحونة
-      // broken_qty = المكسر
-      // combined_qty = إجمالي القطع
       // ========================================================
 
       const { data: newShipment, error: shipmentError } = await supabase
@@ -625,13 +772,11 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
             shipping_type: "series",
 
-            // عدد السريهات التي تم شحنها فعليًا
+            // عدد السريهات الحقيقي
             series_count: requestedSeries,
 
-            // المكسر
             broken_qty: brokenQty,
 
-            // إجمالي القطع
             combined_qty: combinedQty,
           },
         ])
@@ -643,35 +788,21 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
       }
 
       // ========================================================
-      // 2. تجهيز عناصر الشحنة
-      //
-      // كل سري = قطعة واحدة من:
-      // كل موديل × كل مقاس
-      //
-      // مثال:
-      // 2 موديل × 5 مقاسات × 5 سري
-      //
-      // = 50 قطعة
-      //
-      // الألوان لا تدخل في الشحنة.
+      // 2. جلب المخزون
       // ========================================================
 
-      const shipmentItemsData = [];
-
-      // هنحتاج أيضًا نستخدم المخزون الموجود فعليًا
-      // علشان نعرف من أي inventory rows نخصم.
       const { data: inventoryData, error: inventoryError } = await supabase
         .from("inventory")
         .select(
           `
-              id,
-              model_id,
-              size,
-              color,
-              available_qty,
-              reserved_qty,
-              shipped_qty
-            `,
+          id,
+          model_id,
+          size,
+          color,
+          available_qty,
+          reserved_qty,
+          shipped_qty
+        `,
         )
         .in(
           "model_id",
@@ -684,7 +815,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
       }
 
       // ========================================================
-      // خريطة المقاسات
+      // 3. جلب المقاسات
       // ========================================================
 
       const { data: sizesData, error: sizesError } = await supabase
@@ -702,39 +833,21 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
         sizeMap[String(size.name)] = size.name;
       });
 
-      // ========================================================
-      // دالة للحصول على اسم المقاس
-      // ========================================================
-
       const normalizeSize = (rawSize) => {
         return sizeMap[String(rawSize)] || String(rawSize);
       };
 
       // ========================================================
-      // دالة خصم كمية من المخزون
-      //
-      // اللون يتم تجاهله تمامًا في منطق الشحنة.
-      //
-      // لو عندنا:
-      //
-      // Model 1 / S / Red = 2
-      // Model 1 / S / Blue = 5
-      //
-      // والمطلوب 5:
-      //
-      // النظام يأخذ:
-      // 2 من Red
-      // 3 من Blue
-      //
-      // لكن الشحنة نفسها لا تعرف أي لون.
+      // 4. تجهيز عناصر الشحنة
       // ========================================================
 
-      const allocateInventory = async (
-        modelId,
-        sizeName,
-        requiredQty,
-        isBroken = false,
-      ) => {
+      const shipmentItemsData = [];
+
+      // ========================================================
+      // 5. تخصيص من المخزون
+      // ========================================================
+
+      const allocateInventory = async (modelId, sizeName, requiredQty) => {
         let remaining = requiredQty;
 
         const matchingInventory = (inventoryData || []).filter(
@@ -753,9 +866,9 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
           if (take <= 0) continue;
 
-          // ----------------------------------------------------
-          // shipment_items
-          // ----------------------------------------------------
+          // ====================================================
+          // إضافة shipment item
+          // ====================================================
 
           shipmentItemsData.push({
             shipment_id: newShipment.id,
@@ -763,9 +876,9 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
             quantity: take,
           });
 
-          // ----------------------------------------------------
+          // ====================================================
           // تحديث المخزون
-          // ----------------------------------------------------
+          // ====================================================
 
           const isShipped =
             formData.status === "shipped" || formData.status === "delivered";
@@ -797,8 +910,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
             throw updateInventoryError;
           }
 
-          // تحديث القيمة محليًا علشان لو نفس inventory row
-          // احتجناه تاني ما ناخدش منه أكتر من المتاح.
+          // تحديث النسخة الموجودة في الذاكرة
           inventoryRecord.available_qty = newAvailable;
           inventoryRecord.reserved_qty = newReserved;
           inventoryRecord.shipped_qty = newShipped;
@@ -808,57 +920,23 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
         if (remaining > 0) {
           throw new Error(
-            `المخزون غير كافٍ للموديل والمقاس: ${sizeName}. المتبقي المطلوب: ${remaining} قطعة.`,
+            `المخزون غير كافٍ للموديل والمقاس ${sizeName}. المتبقي المطلوب: ${remaining} قطعة.`,
           );
         }
       };
 
       // ========================================================
-      // 3. خصم السريهات
-      //
-      // requestedSeries = عدد السريهات
-      //
-      // لكل موديل:
-      // لكل مقاس:
-      // نخصم requestedSeries قطعة.
-      //
-      // مثال:
-      // 5 سري
-      //
-      // Model 1:
-      // S = 5
-      // M = 5
-      // L = 5
-      // XL = 5
-      // XXL = 5
-      //
-      // Model 2:
-      // S = 5
-      // M = 5
-      // L = 5
-      // XL = 5
-      // XXL = 5
-      //
-      // الإجمالي = 50 قطعة
+      // 6. خصم السريهات من الـ Inventory
       // ========================================================
 
       for (const model of selectedModels) {
         for (const size of commonSizes) {
-          await allocateInventory(model.id, size.name, requestedSeries, false);
+          await allocateInventory(model.id, size.name, requestedSeries);
         }
       }
 
       // ========================================================
-      // 4. خصم المكسر
-      //
-      // المكسر مختلف:
-      // المستخدم يحدد بالضبط:
-      //
-      // Model 1 - S = 2
-      // Model 1 - M = 1
-      // Model 2 - XL = 3
-      //
-      // ويتم تسجيله في shipment_broken_items.
+      // 7. خصم المكسر
       // ========================================================
 
       const brokenRows = [];
@@ -868,25 +946,13 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
         if (quantity <= 0) continue;
 
-        // ------------------------------------------------------
-        // نبحث عن أول inventory row مناسب للموديل والمقاس
-        // علشان نحفظ inventory_id لو أمكن.
-        //
-        // الألوان لا يتم تسجيلها.
-        // ------------------------------------------------------
-
         const matchingInventory = (inventoryData || []).find(
           (item) =>
             item.model_id === brokenItem.model_id &&
             normalizeSize(item.size) === brokenItem.size,
         );
 
-        await allocateInventory(
-          brokenItem.model_id,
-          brokenItem.size,
-          quantity,
-          true,
-        );
+        await allocateInventory(brokenItem.model_id, brokenItem.size, quantity);
 
         brokenRows.push({
           shipment_id: newShipment.id,
@@ -898,7 +964,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
       }
 
       // ========================================================
-      // 5. إدخال عناصر shipment_items
+      // 8. إدخال shipment_items
       // ========================================================
 
       if (shipmentItemsData.length > 0) {
@@ -912,7 +978,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
       }
 
       // ========================================================
-      // 6. إدخال المكسر
+      // 9. إدخال shipment_broken_items
       // ========================================================
 
       if (brokenRows.length > 0) {
@@ -926,7 +992,175 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
       }
 
       // ========================================================
-      // نجاح
+      // 10. تحديث أمر التشغيل
+      //
+      // هنا كان الجزء الناقص
+      //
+      // مثال:
+      //
+      // قبل الشحن:
+      // S = 40
+      // M = 40
+      // L = 40
+      //
+      // شحن 5:
+      // S = 35
+      // M = 35
+      // L = 35
+      //
+      // وبالتالي الـ series المتاحة تصبح 35
+      // ========================================================
+
+      for (const model of selectedModels) {
+        const modelItems = productionOrderItems.filter(
+          (item) => item.model_id === model.id,
+        );
+
+        for (const item of modelItems) {
+          // ----------------------------------------------------
+          // المقاسات الموجودة فعليًا في الـ item
+          // والتي تدخل ضمن الشحنة
+          // ----------------------------------------------------
+
+          const itemSizeRowsToUpdate = item.sizeRows.filter((sizeRow) =>
+            commonSizes.some((size) => size.name === sizeRow.size_name),
+          );
+
+          if (itemSizeRowsToUpdate.length === 0) {
+            continue;
+          }
+
+          // ----------------------------------------------------
+          // تحديث production_order_item_sizes
+          // ----------------------------------------------------
+
+          let itemShippedQuantity = 0;
+
+          for (const sizeRow of itemSizeRowsToUpdate) {
+            const currentQuantity = Number(sizeRow.quantity || 0);
+
+            const newQuantity = Math.max(0, currentQuantity - requestedSeries);
+
+            itemShippedQuantity += Math.min(currentQuantity, requestedSeries);
+
+            const { error: updateSizeError } = await supabase
+              .from("production_order_item_sizes")
+              .update({
+                quantity: newQuantity,
+              })
+              .eq("production_order_item_id", item.id)
+              .eq("size_id", sizeRow.size_id);
+
+            if (updateSizeError) {
+              throw updateSizeError;
+            }
+          }
+
+          // ----------------------------------------------------
+          // تحديث production_order_items.total_quantity
+          // ----------------------------------------------------
+
+          const currentItemTotal = Number(item.total_quantity || 0);
+
+          const newItemTotal = Math.max(
+            0,
+            currentItemTotal - itemShippedQuantity,
+          );
+
+          const { error: updateItemError } = await supabase
+            .from("production_order_items")
+            .update({
+              total_quantity: newItemTotal,
+            })
+            .eq("id", item.id);
+
+          if (updateItemError) {
+            throw updateItemError;
+          }
+        }
+      }
+
+      // ========================================================
+      // 11. تحديث إجمالي أمر التشغيل
+      //
+      // لا نحسبه من selectedModels.length فقط.
+      //
+      // عدد القطع التي خرجت من أمر التشغيل فعليًا هو:
+      //
+      // requestedSeries × عدد الموديلات × عدد المقاسات
+      //
+      // ========================================================
+
+      const productionOrderShippedQty = seriesPieces;
+
+      const currentProductionOrderQty = Number(
+        productionOrder.total_quantity || 0,
+      );
+
+      const newProductionOrderQty = Math.max(
+        0,
+        currentProductionOrderQty - productionOrderShippedQty,
+      );
+
+      // ========================================================
+      // 12. تحديث إجمالي مبلغ أمر التشغيل
+      //
+      // قيمة القطع المشحونة من كل Production Order Item
+      // ========================================================
+
+      let shippedAmount = 0;
+
+      for (const model of selectedModels) {
+        const modelItems = productionOrderItems.filter(
+          (item) => item.model_id === model.id,
+        );
+
+        for (const item of modelItems) {
+          const itemSizeCount = item.sizeRows.filter((sizeRow) =>
+            commonSizes.some((size) => size.name === sizeRow.size_name),
+          ).length;
+
+          const itemShippedQty = requestedSeries * itemSizeCount;
+
+          shippedAmount += itemShippedQty * Number(item.selling_price || 0);
+        }
+      }
+
+      const currentProductionOrderAmount = Number(
+        productionOrder.total_amount || 0,
+      );
+
+      const newProductionOrderAmount = Math.max(
+        0,
+        currentProductionOrderAmount - shippedAmount,
+      );
+
+      // ========================================================
+      // 13. تحديد حالة أمر التشغيل
+      //
+      // لو مفيش قطع متبقية -> completed
+      // غير كده يفضل pending
+      // ========================================================
+
+      const newProductionOrderStatus =
+        newProductionOrderQty <= 0 ? "completed" : "pending";
+
+      const { error: updateProductionOrderError } = await supabase
+        .from("production_orders")
+        .update({
+          total_quantity: newProductionOrderQty,
+          total_amount: newProductionOrderAmount,
+          status: newProductionOrderStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", productionOrder.id);
+
+      if (updateProductionOrderError) {
+        throw updateProductionOrderError;
+      }
+
+      // ========================================================
+      // 14. نجاح
       // ========================================================
 
       toast.success(
@@ -968,26 +1202,21 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
         }`}
         dir="rtl"
       >
-        {/* ======================================================
-            Header
-        ====================================================== */}
-
+        {/* Header */}
         <div className="flex shrink-0 items-center justify-between rounded-t-[2rem] border-b border-slate-200 bg-slate-50 p-6">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#1a365d] text-white">
-                <Package size={22} />
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#1a365d] text-white">
+              <Package size={22} />
+            </div>
 
-              <div>
-                <h2 className="text-2xl font-bold text-[#1a365d]">
-                  إنشاء شحنة جديدة
-                </h2>
+            <div>
+              <h2 className="text-2xl font-bold text-[#1a365d]">
+                إنشاء شحنة جديدة
+              </h2>
 
-                <p className="mt-1 text-sm font-medium text-slate-500">
-                  الشحن يتم بنظام السريهات فقط.
-                </p>
-              </div>
+              <p className="mt-1 text-sm font-medium text-slate-500">
+                الشحن يتم بناءً على أمر التشغيل.
+              </p>
             </div>
           </div>
 
@@ -1000,10 +1229,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
           </button>
         </div>
 
-        {/* ======================================================
-            Form
-        ====================================================== */}
-
+        {/* Form */}
         <form
           onSubmit={handleSubmit}
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
@@ -1036,9 +1262,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                 </select>
               </div>
 
-              {/* ==================================================
-                  العميل
-              ================================================== */}
+              {/* العميل */}
 
               <div>
                 <label className="mb-2 block text-sm font-bold text-slate-700">
@@ -1063,9 +1287,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                 </select>
               </div>
 
-              {/* ==================================================
-                  الكولكشن
-              ================================================== */}
+              {/* الكولكشن */}
 
               <div className="md:col-span-2">
                 <label className="mb-2 block text-sm font-bold text-slate-700">
@@ -1090,7 +1312,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
               </div>
 
               {/* ==================================================
-                  قسم السريهات
+                  أمر التشغيل
               ================================================== */}
 
               {selectedCollectionId && (
@@ -1101,28 +1323,67 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
                       <div>
                         <h3 className="font-bold text-[#1a365d]">
-                          حساب السريهات
+                          بيانات أمر التشغيل
                         </h3>
 
                         <p className="mt-1 text-xs text-slate-500">
-                          السري الواحد = قطعة من كل موديل في كل مقاس.
+                          عدد السريهات يتم قراءته من أمر التشغيل وليس رقمًا
+                          ثابتًا.
                         </p>
                       </div>
                     </div>
 
                     {isLoadingCollection ? (
                       <div className="rounded-xl bg-white p-8 text-center text-sm font-bold text-[#1a365d]">
-                        جاري تحميل بيانات الكولكشن...
+                        جاري تحميل أمر التشغيل...
                       </div>
-                    ) : collectionModels.length === 0 ? (
-                      <div className="rounded-xl border border-slate-200 bg-white p-5 text-center text-sm font-bold text-slate-500">
-                        لا توجد موديلات في هذا الكولكشن.
+                    ) : !productionOrder ? (
+                      <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-center">
+                        <p className="font-bold text-red-700">
+                          لا يوجد أمر تشغيل لهذا الكولكشن.
+                        </p>
+
+                        <p className="mt-1 text-xs text-red-500">
+                          يجب إصدار أمر تشغيل أولًا قبل إنشاء الشحنة.
+                        </p>
                       </div>
                     ) : (
                       <>
-                        {/* ==================================================
-                            الموديلات
-                        ================================================== */}
+                        {/* رقم أمر التشغيل */}
+
+                        <div className="mb-4 rounded-xl border border-blue-100 bg-white p-4">
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            <div>
+                              <p className="text-xs text-slate-500">
+                                رقم أمر التشغيل
+                              </p>
+
+                              <p className="mt-1 font-black text-[#1a365d]">
+                                {productionOrder.order_number}
+                              </p>
+                            </div>
+
+                            <div>
+                              <p className="text-xs text-slate-500">
+                                إجمالي قطع أمر التشغيل
+                              </p>
+
+                              <p className="mt-1 font-black text-[#1a365d]">
+                                {productionOrder.total_quantity}
+                              </p>
+                            </div>
+
+                            <div>
+                              <p className="text-xs text-slate-500">الحالة</p>
+
+                              <p className="mt-1 font-black text-emerald-700">
+                                {productionOrder.status}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* الموديلات */}
 
                         <div className="mb-4 flex items-center justify-between">
                           <label className="text-sm font-bold text-slate-700">
@@ -1232,11 +1493,11 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                                 </p>
                               </div>
 
-                              {/* إجمالي السريهات */}
+                              {/* السريهات الحقيقية */}
 
                               <div className="rounded-xl bg-[#1a365d] p-4 text-center text-white">
                                 <p className="text-xs text-blue-100">
-                                  إجمالي السريهات
+                                  السريهات المتاحة
                                 </p>
 
                                 <p className="mt-1 text-2xl font-black">
@@ -1244,7 +1505,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                                 </p>
 
                                 <p className="mt-1 text-[10px] text-blue-100">
-                                  {selectedModels.length} × {commonSizes.length}
+                                  من أمر التشغيل
                                 </p>
                               </div>
 
@@ -1260,13 +1521,13 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                                 </p>
 
                                 <p className="mt-1 text-[10px] text-slate-400">
-                                  قطعة
+                                  موديلات × مقاسات
                                 </p>
                               </div>
                             </div>
 
                             {/* ==================================================
-                                إدخال السريهات
+                                إدخال عدد السريهات
                             ================================================== */}
 
                             <div className="mt-4 rounded-xl border border-slate-200 bg-white p-5">
@@ -1282,9 +1543,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                                     max={totalSeries}
                                     value={seriesToShip}
                                     onChange={(e) => {
-                                      const value = e.target.value;
-
-                                      setSeriesToShip(value);
+                                      setSeriesToShip(e.target.value);
 
                                       setBrokenItems([]);
                                     }}
@@ -1292,6 +1551,8 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                                     className="w-full rounded-xl border border-slate-300 px-4 py-3 text-lg font-black outline-none focus:border-[#1a365d]"
                                   />
                                 </div>
+
+                                {/* القطع */}
 
                                 <div className="rounded-xl bg-blue-50 p-4">
                                   <p className="text-xs text-blue-600">
@@ -1306,6 +1567,8 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                                     {requestedSeries} × {piecesPerSeries}
                                   </p>
                                 </div>
+
+                                {/* المتبقي */}
 
                                 <div className="rounded-xl bg-emerald-50 p-4">
                                   <p className="text-xs text-emerald-600">
@@ -1322,9 +1585,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                                 </div>
                               </div>
 
-                              {/* ==================================================
-                                  توضيح عملي
-                              ================================================== */}
+                              {/* التوضيح */}
 
                               {requestedSeries > 0 && (
                                 <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
@@ -1341,9 +1602,9 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                                       </p>
 
                                       <p className="mt-1 text-xs leading-6 text-slate-600">
-                                        كل سري يحتوي على قطعة واحدة من كل موديل
-                                        في كل مقاس. الألوان لا تدخل في حساب
-                                        السريهات.
+                                        السري الواحد يحتوي على قطعة واحدة من كل
+                                        موديل في كل مقاس. وعدد السريهات مأخوذ من
+                                        أمر التشغيل.
                                       </p>
                                     </div>
                                   </div>
@@ -1369,8 +1630,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                       <h3 className="font-bold text-red-800">المكسر</h3>
 
                       <p className="mt-1 text-xs leading-5 text-slate-500">
-                        أدخل كمية المكسر لكل موديل ولكل مقاس بشكل منفصل. الألوان
-                        لا يتم تسجيلها.
+                        أدخل كمية المكسر لكل موديل ولكل مقاس.
                       </p>
                     </div>
 
@@ -1486,7 +1746,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
               )}
 
               {/* ==================================================
-                  ملخص نهائي
+                  ملخص الشحنة
               ================================================== */}
 
               {selectedModels.length > 0 && requestedSeries > 0 && (
@@ -1556,9 +1816,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                 />
               </div>
 
-              {/* ==================================================
-                  رقم البوليصة
-              ================================================== */}
+              {/* رقم البوليصة */}
 
               <div>
                 <label className="mb-2 block text-sm font-bold text-slate-700">
@@ -1576,9 +1834,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                 />
               </div>
 
-              {/* ==================================================
-                  الحالة
-              ================================================== */}
+              {/* الحالة */}
 
               <div className="md:col-span-2">
                 <label className="mb-2 block text-sm font-bold text-slate-700">
@@ -1601,9 +1857,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
             </div>
           </div>
 
-          {/* ======================================================
-              Footer
-          ====================================================== */}
+          {/* Footer */}
 
           <div className="flex shrink-0 justify-end gap-3 rounded-b-[2rem] border-t border-slate-200 bg-white p-6">
             <button
@@ -1620,6 +1874,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
               disabled={
                 isSubmitting ||
                 !selectedCollectionId ||
+                !productionOrder ||
                 selectedModels.length === 0 ||
                 requestedSeries <= 0
               }

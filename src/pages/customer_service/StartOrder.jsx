@@ -1,100 +1,57 @@
 import React, { useState, useRef, useEffect } from "react";
-
 import { supabase } from "../../../supabase";
-
 import { Link, useParams, useNavigate } from "react-router-dom";
-
 import { useReactToPrint } from "react-to-print";
-
 import WorkOrderPDFTemplate from "../../components/WorkOrderPDFTemplate";
 import ContractPDFTemplate from "../../components/ContractPDFTemplate";
-
 import { handleIssueOrderToPlanning } from "../../services/collectionsService";
-
 import { toast } from "sonner";
-
 import { notificationService } from "../../services/notificationService";
-
 import { sendForApproval } from "../../services/approvalsService";
 
 /* ============================================================
    Helpers
 ============================================================ */
-
 const normalizeToStrings = (value) => {
-  if (value === null || value === undefined) {
-    return [];
-  }
-
-  if (typeof value === "string") {
+  if (value === null || value === undefined) return [];
+  if (typeof value === "string")
     return value
       .split(/[,،/|]+/)
       .map((item) => item.trim())
       .filter(Boolean);
-  }
-
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (typeof value === "number" || typeof value === "boolean")
     return [String(value)];
-  }
-
-  if (Array.isArray(value)) {
+  if (Array.isArray(value))
     return value.flatMap((item) => normalizeToStrings(item));
-  }
-
-  if (typeof value === "object") {
+  if (typeof value === "object")
     return Object.keys(value)
       .map((key) => String(key).trim())
       .filter(Boolean);
-  }
-
   return [];
 };
 
 const safeText = (value, fallback = "-") => {
-  if (value === null || value === undefined) {
-    return fallback;
-  }
-
-  if (typeof value === "string") {
-    return value;
-  }
-
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean")
     return String(value);
-  }
-
-  if (Array.isArray(value)) {
-    return normalizeToStrings(value).join("، ");
-  }
-
-  if (typeof value === "object") {
-    return Object.keys(value).join("، ");
-  }
-
+  if (Array.isArray(value)) return normalizeToStrings(value).join("، ");
+  if (typeof value === "object") return Object.keys(value).join("، ");
   return fallback;
 };
 
-/* ============================================================
-   Extract Components
-============================================================ */
-
 const extractComponents = (...values) => {
   for (const value of values) {
-    if (value === null || value === undefined) {
-      continue;
-    }
+    if (value === null || value === undefined) continue;
 
     if (Array.isArray(value)) {
       const result = [];
-
       value.forEach((item) => {
         if (item && typeof item === "object" && !Array.isArray(item)) {
           const color =
             item.color ?? item.colors ?? item.colour ?? item.color_name;
-
           const part =
             item.part ?? item.part_name ?? item.partName ?? item.type ?? "";
-
           const variant =
             item.variant ?? item.variant_key ?? item.variantKey ?? null;
 
@@ -109,26 +66,17 @@ const extractComponents = (...values) => {
             });
           }
         } else if (typeof item === "string") {
-          result.push({
-            part: "",
-            color: item,
-            variant: null,
-          });
+          result.push({ part: "", color: item, variant: null });
         }
       });
-
-      if (result.length > 0) {
-        return result.filter((item) => item.color);
-      }
+      if (result.length > 0) return result.filter((item) => item.color);
     }
 
     if (typeof value === "object" && !Array.isArray(value)) {
       const directColor =
         value.color ?? value.colors ?? value.colour ?? value.color_name;
-
       const directPart =
         value.part ?? value.part_name ?? value.partName ?? value.type ?? "";
-
       const directVariant =
         value.variant ?? value.variant_key ?? value.variantKey ?? null;
 
@@ -171,82 +119,45 @@ const extractComponents = (...values) => {
           }))
           .filter((item) => item.color);
 
-        if (result.length > 0) {
-          return result;
-        }
+        if (result.length > 0) return result;
       }
     }
 
     if (typeof value === "string") {
       const colors = normalizeToStrings(value);
-
-      if (colors.length > 0) {
-        return colors.map((color) => ({
-          part: "",
-          color,
-          variant: null,
-        }));
-      }
+      if (colors.length > 0)
+        return colors.map((color) => ({ part: "", color, variant: null }));
     }
   }
-
   return [];
 };
-
-/* ============================================================
-   Extract Sizes
-============================================================ */
 
 const extractSizes = (...values) => {
   for (const value of values) {
-    if (value === null || value === undefined) {
-      continue;
-    }
-
+    if (value === null || value === undefined) continue;
     if (typeof value === "string") {
       const result = normalizeToStrings(value);
-
-      if (result.length > 0) {
-        return result;
-      }
+      if (result.length > 0) return result;
     }
-
     if (Array.isArray(value)) {
       const result = value.flatMap((item) => normalizeToStrings(item));
-
-      if (result.length > 0) {
-        return result;
-      }
+      if (result.length > 0) return result;
     }
-
     if (typeof value === "object") {
       const directSizes =
         value.sizes ?? value.size ?? value.size_range ?? value.range;
-
       if (directSizes !== undefined) {
         const result = normalizeToStrings(directSizes);
-
-        if (result.length > 0) {
-          return result;
-        }
+        if (result.length > 0) return result;
       }
-
       const keys = Object.keys(value)
         .map((key) => String(key).trim())
         .filter(Boolean);
-
-      if (keys.length > 0) {
-        return keys;
-      }
+      if (keys.length > 0) return keys;
     }
   }
-
   return [];
 };
-
-/* ============================================================
-   Build Variants
-============================================================ */
 
 const buildVariants = (components) => {
   const hasExplicitVariants = components.some(
@@ -260,22 +171,12 @@ const buildVariants = (components) => {
 
   if (!hasExplicitVariants) {
     variantsMap.set(1, components);
-
-    return [
-      {
-        variantKey: 1,
-        components,
-      },
-    ];
+    return [{ variantKey: 1, components }];
   }
 
   components.forEach((component) => {
     const variantKey = Number(component.variant) || 1;
-
-    if (!variantsMap.has(variantKey)) {
-      variantsMap.set(variantKey, []);
-    }
-
+    if (!variantsMap.has(variantKey)) variantsMap.set(variantKey, []);
     variantsMap.get(variantKey).push(component);
   });
 
@@ -290,127 +191,86 @@ const buildVariants = (components) => {
 /* ============================================================
    Component
 ============================================================ */
-
 const StartOrder = () => {
   const { id } = useParams();
-
   const navigate = useNavigate();
 
   const [collectionInfo, setCollectionInfo] = useState(null);
-
   const [isLoading, setIsLoading] = useState(true);
-
   const [isSubmitting, setIsSubmitting] = useState(false);
-
   const [isSendingContract, setIsSendingApproval] = useState(false);
 
-  /*
-    العقد نفسه لا يوجد له جدول في الـ schema الحالي.
-
-    لذلك مؤقتًا بنحفظ حالة إنشاء العقد في sessionStorage.
-  */
+  // 💡 المتغير الجديد للتأكد هل الأوردر تم إصداره مسبقاً ولا لأ
+  const [existingOrder, setExistingOrder] = useState(null);
   const [contractCreated, setContractCreated] = useState(false);
-
   const [seriesCounts, setSeriesCounts] = useState({});
 
   const workOrderRef = useRef(null);
-
   const contractRef = useRef(null);
 
   /* ============================================================
      Fetch Collection
   ============================================================ */
-
   useEffect(() => {
     const fetchRealData = async () => {
       setIsLoading(true);
-
       try {
+        // 💡 التعديل هنا: جلبنا production_orders من الداتابيز عشان نتأكد
         const { data: orderData, error } = await supabase
           .from("collections")
           .select(
             `
-              id,
-              name,
-              brands (
-                name_ar,
-                name_en
-              ),
-              quotations (
-                id,
-                quotation_number,
-                total_sales_price,
-                status
-              ),
+              id, name,
+              brands ( name_ar, name_en ),
+              quotations ( id, quotation_number, total_sales_price, status ),
+              production_orders ( id, status ),
               models (
-                id,
-                model_number,
-                name,
-                image_url,
-                colors,
-                tech_packs (
-                  content
-                ),
-                quotation_items (
-                  selling_price,
-                  quotation_id
-                )
+                id, model_number, name, image_url, colors,
+                tech_packs ( content ),
+                quotation_items ( selling_price, quotation_id )
               )
             `,
           )
           .eq("id", id)
           .single();
 
-        if (error) {
-          throw error;
-        }
+        if (error) throw error;
 
         /* ======================================================
-           Approved Quotation
+           Check Existing Order
         ====================================================== */
+        const prodOrder = orderData.production_orders?.[0] || null;
+        setExistingOrder(prodOrder);
 
         const approvedQuotation =
-          orderData.quotations?.find(
-            (quotation) => quotation.status === "approved",
-          ) || null;
+          orderData.quotations?.find((q) => q.status === "approved") || null;
 
-        /* ======================================================
-           Contract Created - Temporary
-        ====================================================== */
-
+        // 💡 التعديل هنا: لو الأوردر موجود، يبقى العقد اكيد اتعمل، هنخليها true اجباري
         const savedContractStatus = sessionStorage.getItem(
           `contract_created_${orderData.id}`,
         );
-
-        const hasCreatedContract = savedContractStatus === "true";
-
+        const hasCreatedContract =
+          !!prodOrder || savedContractStatus === "true";
         setContractCreated(hasCreatedContract);
 
         /* ======================================================
            Models
         ====================================================== */
-
         const formattedModels = (orderData.models || []).map((model, index) => {
           const tpContent = Array.isArray(model.tech_packs)
             ? model.tech_packs[0]?.content
             : model.tech_packs?.content;
-
           const info = tpContent?.basic_info || tpContent || {};
-
-          /* ================= Components ================= */
 
           let components = extractComponents(
             model.colors,
             info.colors,
             info.color,
           );
-
           components = components
             .map((component) => ({
               part: safeText(component.part, "").trim(),
-
               color: safeText(component.color, "").trim(),
-
               variant:
                 component.variant !== null && component.variant !== undefined
                   ? Number(component.variant)
@@ -418,245 +278,157 @@ const StartOrder = () => {
             }))
             .filter((component) => component.color);
 
-          if (components.length === 0) {
-            components = [
-              {
-                part: "",
-                color: "غير محدد",
-                variant: null,
-              },
-            ];
-          }
-
-          /* ================= Variants ================= */
+          if (components.length === 0)
+            components = [{ part: "", color: "غير محدد", variant: null }];
 
           const variants = buildVariants(components);
-
-          /* ================= Sizes ================= */
 
           let finalSizes = extractSizes(
             info.sizes,
             info.size_range,
             info.sizeRange,
           );
-
-          finalSizes = finalSizes
-            .map((size) => safeText(size, "").trim())
-            .filter(Boolean);
-
-          finalSizes = [...new Set(finalSizes)];
-
-          if (finalSizes.length === 0) {
-            finalSizes = ["M", "L", "XL"];
-          }
-
-          /* ================= Price ================= */
+          finalSizes = [
+            ...new Set(
+              finalSizes
+                .map((size) => safeText(size, "").trim())
+                .filter(Boolean),
+            ),
+          ];
+          if (finalSizes.length === 0) finalSizes = ["M", "L", "XL"];
 
           const quotationItem =
             model.quotation_items?.find(
               (item) => item.quotation_id === approvedQuotation?.id,
             ) || null;
-
           const price = quotationItem
             ? Number(quotationItem.selling_price) || 0
             : 0;
-
-          /* ================= Fabric ================= */
 
           const fabric = safeText(
             info.main_fabric || info.fabric_type || info.material,
             "غير محدد",
           );
-
-          /* ================= Weight ================= */
-
           const weight = safeText(
             info.fabric_weight || info.weight,
             "غير محدد",
           );
-
-          /* ================= Model ================= */
-
           const modelName = safeText(model.name, `موديل ${index + 1}`);
-
           const modelNumber = safeText(model.model_number, `MOD-${index + 1}`);
 
           return {
             real_id: model.id,
-
             id: modelNumber,
-
             model_number: modelNumber,
-
             name: modelName,
-
             image_url:
               typeof model.image_url === "string" ? model.image_url : null,
-
             components,
-
             variants,
-
             sizes: finalSizes,
-
             fabric,
-
             weight,
-
             approvedPrice: price,
           };
         });
 
-        /* ======================================================
-           Collection
-        ====================================================== */
-
         const formattedData = {
           id: orderData.id,
-
           brandName: safeText(orderData.brands?.name_ar, "غير محدد"),
-
           brandCode:
             typeof orderData.brands?.name_en === "string"
               ? orderData.brands.name_en.substring(0, 3).toUpperCase()
               : "RKM",
-
           collectionName: safeText(orderData.name, "غير محدد"),
-
           quotation: approvedQuotation,
-
           hasApprovedQuotation: !!approvedQuotation,
-
           models: formattedModels,
         };
 
         setCollectionInfo(formattedData);
 
-        /* ======================================================
-           Initial Series
-        ====================================================== */
-
         const initialCounts = {};
-
         formattedData.models.forEach((model) => {
           initialCounts[model.id] = {};
-
           model.variants.forEach((variant) => {
             initialCounts[model.id][variant.variantKey] = {};
-
             model.sizes.forEach((size) => {
               initialCounts[model.id][variant.variantKey][size] = 5;
             });
           });
         });
-
         setSeriesCounts(initialCounts);
       } catch (error) {
         console.error("خطأ في جلب بيانات أمر التشغيل:", error);
-
         toast.error("حدث خطأ في جلب بيانات أمر التشغيل.");
       } finally {
         setIsLoading(false);
       }
     };
 
-    if (id) {
-      fetchRealData();
-    }
+    if (id) fetchRealData();
   }, [id]);
 
   /* ============================================================
      Change Series
   ============================================================ */
-
   const handleSeriesChange = (modelId, variantKey, size, value) => {
     const parsedValue = Math.max(0, parseInt(value, 10) || 0);
-
     setSeriesCounts((prev) => ({
       ...prev,
-
       [modelId]: {
         ...(prev[modelId] || {}),
-
         [variantKey]: {
           ...(prev[modelId]?.[variantKey] || {}),
-
           [size]: parsedValue,
         },
       },
     }));
   };
 
-  /* ============================================================
-     Global Series
-  ============================================================ */
-
   const handleGlobalSeriesChange = (value) => {
     const parsedValue = Math.max(0, Number(value) || 0);
-
     const newCounts = {};
-
     collectionInfo.models.forEach((model) => {
       newCounts[model.id] = {};
-
       model.variants.forEach((variant) => {
         newCounts[model.id][variant.variantKey] = {};
-
         model.sizes.forEach((size) => {
           newCounts[model.id][variant.variantKey][size] = parsedValue;
         });
       });
     });
-
     setSeriesCounts(newCounts);
   };
 
-  /* ============================================================
-     Variant Total
-  ============================================================ */
-
   const getVariantTotal = (model, variantKey) => {
-    return model.sizes.reduce((total, size) => {
-      return (
-        total + (Number(seriesCounts?.[model.id]?.[variantKey]?.[size]) || 0)
-      );
-    }, 0);
+    return model.sizes.reduce(
+      (total, size) =>
+        total + (Number(seriesCounts?.[model.id]?.[variantKey]?.[size]) || 0),
+      0,
+    );
   };
-
-  /* ============================================================
-     Model Total
-  ============================================================ */
 
   const getModelTotal = (model) => {
-    return model.variants.reduce((total, variant) => {
-      return total + getVariantTotal(model, variant.variantKey);
-    }, 0);
+    return model.variants.reduce(
+      (total, variant) => total + getVariantTotal(model, variant.variantKey),
+      0,
+    );
   };
 
-  /* ============================================================
-     Grand Total
-  ============================================================ */
-
   const grandTotalQty =
-    collectionInfo?.models?.reduce((total, model) => {
-      return total + getModelTotal(model);
-    }, 0) || 0;
-
-  /* ============================================================
-     Validate Series
-  ============================================================ */
+    collectionInfo?.models?.reduce(
+      (total, model) => total + getModelTotal(model),
+      0,
+    ) || 0;
 
   const hasInvalidSeries = () => {
-    if (!collectionInfo?.models) {
-      return true;
-    }
-
+    if (!collectionInfo?.models) return true;
     return collectionInfo.models.some((model) =>
       model.variants.some((variant) =>
         model.sizes.some((size) => {
           const series =
             Number(seriesCounts?.[model.id]?.[variant.variantKey]?.[size]) || 0;
-
           return series <= 0;
         }),
       ),
@@ -664,35 +436,20 @@ const StartOrder = () => {
   };
 
   /* ============================================================
-     Print Work Order
+     Print Handlers
   ============================================================ */
-
   const handlePrintWO = useReactToPrint({
     contentRef: workOrderRef,
-
     documentTitle: `أمر_تشغيل_${collectionInfo?.brandName || "فارغ"}`,
   });
 
-  /* ============================================================
-     Print Contract
-  ============================================================ */
-
   const handlePrintContract = useReactToPrint({
     contentRef: contractRef,
-
     documentTitle: `عقد_تصنيع_${collectionInfo?.brandName || "فارغ"}`,
-
     onAfterPrint: () => {
-      /*
-        تسجيل أن العقد تم إنشاؤه بعد انتهاء الطباعة.
-        مؤقتًا باستخدام sessionStorage.
-      */
-
       if (collectionInfo?.id) {
         sessionStorage.setItem(`contract_created_${collectionInfo.id}`, "true");
-
         setContractCreated(true);
-
         toast.success("تم إصدار عقد العميل بنجاح.");
       }
     },
@@ -701,183 +458,85 @@ const StartOrder = () => {
   /* ============================================================
      Save And Issue
   ============================================================ */
-
   const handleSaveAndIssue = async () => {
-    /* ==========================================================
-       Quotation Validation
-    ========================================================== */
-
-    if (!collectionInfo?.hasApprovedQuotation) {
-      toast.error("لا يمكن إصدار أمر التشغيل بدون عرض سعر معتمد.");
-
-      return;
-    }
-
-    /* ==========================================================
-       Contract Validation
-    ========================================================== */
-
-    if (!contractCreated) {
-      toast.error("لا يمكن إصدار أمر التشغيل قبل إصدار عقد العميل.");
-
-      return;
-    }
-
-    /* ==========================================================
-       Series Validation
-    ========================================================== */
-
-    if (hasInvalidSeries()) {
-      toast.error("برجاء تحديد عدد سريهات أكبر من صفر لكل Variant ولكل مقاس.");
-
-      return;
-    }
+    if (!collectionInfo?.hasApprovedQuotation)
+      return toast.error("لا يمكن إصدار أمر التشغيل بدون عرض سعر معتمد.");
+    if (!contractCreated)
+      return toast.error("لا يمكن إصدار أمر التشغيل قبل إصدار عقد العميل.");
+    if (hasInvalidSeries())
+      return toast.error(
+        "برجاء تحديد عدد سريهات أكبر من صفر لكل Variant ولكل مقاس.",
+      );
 
     const confirmIssue = window.confirm(
       "هل أنت متأكد من حفظ وإصدار أمر التشغيل؟ ستتم إضافة البيانات لقسم التخطيط بشكل نهائي.",
     );
-
-    if (!confirmIssue) {
-      return;
-    }
+    if (!confirmIssue) return;
 
     setIsSubmitting(true);
-
     try {
       await handleIssueOrderToPlanning(collectionInfo, seriesCounts);
-
       toast.success(
         "تم إصدار أمر التشغيل بنجاح! 🚀 تم تسجيل البيانات وإرسالها للمصنع.",
       );
-
       await notificationService.sendNotification(
         "planning",
         "أمر تشغيل جديد 🏭",
         `تم إصدار أمر تشغيل جديد لكولكشن: ${collectionInfo.collectionName}، بانتظار استلامك.`,
         id,
       );
-
       navigate("/customer_service/customer_followup");
     } catch (error) {
       console.error(error);
-
       toast.error(error.message || "حدث خطأ أثناء إصدار أمر التشغيل.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  /* ============================================================
-     Send Contract For Approval
-  ============================================================ */
-
   const handleSendContractForApproval = async () => {
-    /* ==========================================================
-       Quotation Validation
-    ========================================================== */
-
-    if (!collectionInfo?.hasApprovedQuotation) {
-      toast.error("لا يمكن إرسال العقد بدون عرض سعر معتمد.");
-
-      return;
-    }
-
-    /* ==========================================================
-       Series Validation
-    ========================================================== */
-
-    if (hasInvalidSeries()) {
-      toast.error(
+    if (!collectionInfo?.hasApprovedQuotation)
+      return toast.error("لا يمكن إرسال العقد بدون عرض سعر معتمد.");
+    if (hasInvalidSeries())
+      return toast.error(
         "برجاء التأكد من تحديد عدد سريهات أكبر من صفر لكل Variant ولكل مقاس.",
       );
-
-      return;
-    }
-
-    /* ==========================================================
-       Price Validation
-    ========================================================== */
-
     const hasUnpricedModels = collectionInfo.models.some(
       (model) => !model.approvedPrice || model.approvedPrice <= 0,
     );
-
-    if (hasUnpricedModels) {
-      toast.error(
+    if (hasUnpricedModels)
+      return toast.error(
         "لا يمكن إرسال العقد! هناك موديلات لم يتم تسعيرها واعتمادها بعد.",
       );
 
-      return;
-    }
-
     setIsSendingApproval(true);
-
     try {
-      const contractDetails = `
-مطلوب اعتماد عقد تصنيع.
-
-البراند: ${collectionInfo.brandName}
-الكولكشن: ${collectionInfo.collectionName}
-رقم عرض السعر: ${collectionInfo.quotation?.quotation_number || "-"}
-إجمالي الكمية: ${grandTotalQty} قطعة.
-إجمالي سعر البيع: ${collectionInfo.quotation?.total_sales_price || 0}
-      `.trim();
-
+      const contractDetails = `مطلوب اعتماد عقد تصنيع.\nالبراند: ${collectionInfo.brandName}\nالكولكشن: ${collectionInfo.collectionName}\nرقم عرض السعر: ${collectionInfo.quotation?.quotation_number || "-"}\nإجمالي الكمية: ${grandTotalQty} قطعة.\nإجمالي سعر البيع: ${collectionInfo.quotation?.total_sales_price || 0}`;
       await sendForApproval(id, "contract", contractDetails);
-
-      /*
-        مهم:
-        هنا لا نسجل العقد كـ "مُصدر" لأن العقد
-        تم إرساله للاعتماد فقط.
-
-        إنشاء العقد فعليًا يتم عند الضغط على
-        "إصدار عقد العمل".
-      */
-
       toast.success("تم إرسال العقد للمدير للاعتماد.");
     } catch (error) {
       console.error(error);
-
       toast.error(error.message || "حدث خطأ أثناء إرسال العقد للاعتماد.");
     } finally {
       setIsSendingApproval(false);
     }
   };
 
-  /* ============================================================
-     Loading
-  ============================================================ */
-
-  if (isLoading) {
+  if (isLoading)
     return (
       <div className="flex items-center justify-center min-h-[400px] text-slate-600 font-bold">
         جاري تحميل بيانات الكولكشن...
       </div>
     );
-  }
-
-  /* ============================================================
-     No Collection
-  ============================================================ */
-
-  if (!collectionInfo) {
+  if (!collectionInfo)
     return (
       <div className="flex items-center justify-center min-h-[400px] text-red-600 font-bold">
         لم يتم العثور على بيانات هذا الكولكشن.
       </div>
     );
-  }
-
-  /* ============================================================
-     UI
-  ============================================================ */
 
   return (
     <div className="space-y-6">
-      {/* ======================================================
-          PDF Templates
-      ====================================================== */}
-
       <div
         style={{
           position: "absolute",
@@ -893,17 +552,12 @@ const StartOrder = () => {
           data={collectionInfo}
           seriesCount={seriesCounts}
         />
-
         <ContractPDFTemplate
           ref={contractRef}
           data={collectionInfo}
           seriesCount={seriesCounts}
         />
       </div>
-
-      {/* ======================================================
-          Back
-      ====================================================== */}
 
       <div className="flex justify-end">
         <Link
@@ -914,25 +568,18 @@ const StartOrder = () => {
         </Link>
       </div>
 
-      {/* ======================================================
-          Header
-      ====================================================== */}
-
       <div className="bg-white rounded-2xl p-6 border border-emerald-200 shadow-sm text-right relative overflow-hidden">
         <div className="absolute top-0 right-0 w-2 h-full bg-emerald-500" />
-
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-[#1a365d] mb-2">
               إصدار أمر التشغيل لـ: {collectionInfo.brandName}
             </h1>
-
             <p className="text-sm text-slate-500">
               ({collectionInfo.collectionName}) - حدد عدد السريهات لكل Variant
               ولكل مقاس.
             </p>
           </div>
-
           <div className="flex flex-wrap gap-2">
             {collectionInfo.hasApprovedQuotation ? (
               <span className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full text-sm font-bold border border-emerald-200">
@@ -943,7 +590,6 @@ const StartOrder = () => {
                 لا يوجد عرض سعر معتمد
               </span>
             )}
-
             {contractCreated && (
               <span className="bg-blue-50 text-blue-700 px-4 py-2 rounded-full text-sm font-bold border border-blue-200">
                 العقد مُصدر ✓
@@ -953,71 +599,54 @@ const StartOrder = () => {
         </div>
       </div>
 
-      {/* ======================================================
-          Main Content
-      ====================================================== */}
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ====================================================
-            Global Series
-        ==================================================== */}
-
         <div className="lg:col-span-1 flex flex-col gap-6">
           <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
             <h3 className="text-lg font-bold text-[#1a365d] mb-4 text-right">
               تطبيق عدد سريهات ثابت
             </h3>
-
             <p className="text-xs text-slate-500 mb-4 text-right">
               يمكنك تطبيق عدد موحد على جميع الـ Variants والمقاسات، أو تعديل كل
               مقاس بشكل منفصل.
             </p>
-
             <div className="flex flex-wrap gap-3 mb-5">
               {[1, 2, 3, 5, 10, 13, 20].map((num) => (
                 <button
                   key={num}
                   onClick={() => handleGlobalSeriesChange(num)}
-                  className="px-4 py-2 rounded-xl text-sm font-bold transition-colors border bg-slate-50 text-slate-600 border-slate-300 hover:border-[#1a365d] hover:text-[#1a365d] hover:bg-blue-50"
+                  disabled={existingOrder} // 💡 منع التعديل لو الأوردر متسجل
+                  className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors border ${existingOrder ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed" : "bg-slate-50 text-slate-600 border-slate-300 hover:border-[#1a365d] hover:text-[#1a365d] hover:bg-blue-50"}`}
                 >
                   {num} سري للكل
                 </button>
               ))}
             </div>
-
             <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
               <span className="text-sm text-slate-500 font-medium">
                 أو إدخال مخصص للكل:
               </span>
-
               <input
                 type="number"
                 min="1"
                 onChange={(e) => handleGlobalSeriesChange(e.target.value)}
                 placeholder="مثال: 15"
-                className="w-24 border border-slate-300 rounded-lg p-2 text-center focus:outline-none focus:border-[#1a365d] font-bold text-[#1a365d]"
+                disabled={existingOrder} // 💡 منع التعديل
+                className="w-24 border border-slate-300 rounded-lg p-2 text-center focus:outline-none focus:border-[#1a365d] font-bold text-[#1a365d] disabled:bg-slate-100"
               />
             </div>
           </div>
         </div>
 
-        {/* ====================================================
-            Models
-        ==================================================== */}
-
         <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col">
           <h3 className="text-lg font-bold text-[#1a365d] mb-6 text-right">
             توزيع الكميات والسريهات حسب التركيبة والمقاس
           </h3>
-
           <div className="space-y-6">
             {collectionInfo.models.map((model) => (
               <div
                 key={model.id}
                 className="border border-slate-200 rounded-xl overflow-hidden"
               >
-                {/* Model Header */}
-
                 <div className="bg-slate-50 p-4 border-b border-slate-200">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
@@ -1032,26 +661,21 @@ const StartOrder = () => {
                           صورة
                         </div>
                       )}
-
                       <div>
                         <div className="font-bold text-[#1a365d]">
                           {model.name}
                         </div>
-
                         <div className="text-xs text-slate-400 mt-1">
                           {model.model_number}
                         </div>
                       </div>
                     </div>
-
                     <div className="text-right">
                       <div className="text-xs text-slate-500">
                         إجمالي الموديل
                       </div>
-
                       <div className="font-black text-xl text-[#1a365d]">
-                        {getModelTotal(model).toLocaleString()}
-
+                        {getModelTotal(model).toLocaleString()}{" "}
                         <span className="text-xs font-normal text-slate-500 mr-1">
                           قطعة
                         </span>
@@ -1060,22 +684,17 @@ const StartOrder = () => {
                   </div>
                 </div>
 
-                {/* Variants */}
-
                 <div className="p-4 space-y-5">
                   {model.variants.map((variant) => (
                     <div
                       key={`${model.id}-variant-${variant.variantKey}`}
                       className="border border-slate-200 rounded-xl overflow-hidden"
                     >
-                      {/* Variant Header */}
-
                       <div className="bg-[#1a365d] text-white p-4">
                         <div className="flex flex-col sm:flex-row justify-between gap-3">
                           <div className="font-bold">
                             تركيبة رقم {variant.variantKey}
                           </div>
-
                           <div className="text-sm">
                             إجمالي التركيبة:{" "}
                             <span className="font-black">
@@ -1087,9 +706,6 @@ const StartOrder = () => {
                             قطعة
                           </div>
                         </div>
-
-                        {/* Components */}
-
                         <div className="flex flex-wrap gap-2 mt-3">
                           {variant.components.map(
                             (component, componentIndex) => (
@@ -1100,17 +716,13 @@ const StartOrder = () => {
                                 <span className="font-bold">
                                   {component.part || "الجزء"}
                                 </span>
-
                                 <span>→</span>
-
                                 <span>{component.color}</span>
                               </span>
                             ),
                           )}
                         </div>
                       </div>
-
-                      {/* Sizes */}
 
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm text-center min-w-[650px]">
@@ -1119,17 +731,14 @@ const StartOrder = () => {
                               <th className="py-3 px-4 font-semibold text-right text-[#1a365d]">
                                 المقاس
                               </th>
-
                               <th className="py-3 px-4 font-semibold text-[#1a365d]">
                                 عدد السريهات
                               </th>
-
                               <th className="py-3 px-4 font-semibold text-[#1a365d]">
                                 الكمية
                               </th>
                             </tr>
                           </thead>
-
                           <tbody className="divide-y divide-slate-200">
                             {model.sizes.map((size) => {
                               const currentSeries =
@@ -1138,7 +747,6 @@ const StartOrder = () => {
                                     variant.variantKey
                                   ]?.[size],
                                 ) || 0;
-
                               return (
                                 <tr
                                   key={`${model.id}-${variant.variantKey}-${size}`}
@@ -1149,7 +757,6 @@ const StartOrder = () => {
                                       {size}
                                     </span>
                                   </td>
-
                                   <td className="py-4 px-4">
                                     <input
                                       type="number"
@@ -1163,13 +770,12 @@ const StartOrder = () => {
                                           e.target.value,
                                         )
                                       }
-                                      className="w-32 border border-slate-300 rounded-md p-2 text-center font-bold text-[#b91c1c] focus:outline-none focus:border-[#1a365d]"
+                                      disabled={existingOrder} // 💡 منع التعديل
+                                      className="w-32 border border-slate-300 rounded-md p-2 text-center font-bold text-[#b91c1c] focus:outline-none focus:border-[#1a365d] disabled:bg-slate-100"
                                     />
                                   </td>
-
                                   <td className="py-4 px-4 font-bold text-lg text-slate-800">
-                                    {currentSeries.toLocaleString()}
-
+                                    {currentSeries.toLocaleString()}{" "}
                                     <span className="text-xs text-slate-500 font-normal mr-1">
                                       قطعة
                                     </span>
@@ -1187,16 +793,12 @@ const StartOrder = () => {
             ))}
           </div>
 
-          {/* Grand Total */}
-
           <div className="mt-6 bg-slate-50 p-4 rounded-xl border border-slate-200 flex justify-between items-center">
             <span className="text-slate-600 font-bold">
               الإجمالي الكلي للكميات المطلوب تشغيلها:
             </span>
-
             <span className="text-3xl font-black text-[#1a365d]">
-              {grandTotalQty.toLocaleString()}
-
+              {grandTotalQty.toLocaleString()}{" "}
               <span className="text-sm font-normal text-slate-500 mr-1">
                 قطعة
               </span>
@@ -1206,50 +808,21 @@ const StartOrder = () => {
           {/* ==================================================
               Buttons
           ================================================== */}
-
           <div className="mt-8 pt-6 border-t border-slate-100 flex flex-wrap justify-end gap-3">
-            {/* ==================================================
-                Work Order
-            ================================================== */}
-
             <button
               onClick={handlePrintWO}
               disabled={
                 !collectionInfo.hasApprovedQuotation || !contractCreated
               }
-              title={
-                !collectionInfo.hasApprovedQuotation
-                  ? "يجب وجود عرض سعر معتمد أولاً"
-                  : !contractCreated
-                    ? "يجب إصدار عقد العميل أولاً"
-                    : ""
-              }
-              className={`text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto ${
-                !collectionInfo.hasApprovedQuotation || !contractCreated
-                  ? "bg-slate-300 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-800"
-              }`}
+              className={`text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto ${!collectionInfo.hasApprovedQuotation || !contractCreated ? "bg-slate-300 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-800"}`}
             >
               طباعة ملف أمر التشغيل (PDF)
             </button>
 
-            {/* ==================================================
-                Contract
-            ================================================== */}
-
             <button
               onClick={handlePrintContract}
               disabled={!collectionInfo.hasApprovedQuotation}
-              title={
-                !collectionInfo.hasApprovedQuotation
-                  ? "يجب وجود عرض سعر معتمد أولاً"
-                  : ""
-              }
-              className={`text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto ${
-                !collectionInfo.hasApprovedQuotation
-                  ? "bg-slate-300 cursor-not-allowed"
-                  : "bg-slate-800 hover:bg-slate-900"
-              }`}
+              className={`text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto ${!collectionInfo.hasApprovedQuotation ? "bg-slate-300 cursor-not-allowed" : "bg-slate-800 hover:bg-slate-900"}`}
             >
               {!collectionInfo.hasApprovedQuotation
                 ? "لا يوجد عرض سعر معتمد"
@@ -1258,55 +831,35 @@ const StartOrder = () => {
                   : "إصدار عقد العمل (PDF)"}
             </button>
 
-            {/* ==================================================
-                Save & Issue
-            ================================================== */}
-
             <button
               onClick={handleSaveAndIssue}
               disabled={
                 isSubmitting ||
                 !collectionInfo.hasApprovedQuotation ||
-                !contractCreated
-              }
-              title={
-                !collectionInfo.hasApprovedQuotation
-                  ? "يجب وجود عرض سعر معتمد"
-                  : !contractCreated
-                    ? "يجب إصدار عقد العميل أولاً"
-                    : ""
-              }
-              className={`text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto ${
-                isSubmitting ||
-                !collectionInfo.hasApprovedQuotation ||
-                !contractCreated
-                  ? "bg-slate-400 cursor-not-allowed"
-                  : "bg-[#b91c1c] hover:bg-red-800"
-              }`}
+                !contractCreated ||
+                !!existingOrder
+              } // 💡 تعطيل لو الأوردر موجود
+              className={`text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto ${isSubmitting || !collectionInfo.hasApprovedQuotation || !contractCreated || !!existingOrder ? "bg-slate-400 cursor-not-allowed" : "bg-[#b91c1c] hover:bg-red-800"}`}
             >
-              {isSubmitting
-                ? "جاري الإصدار..."
-                : !collectionInfo.hasApprovedQuotation
-                  ? "لا يوجد عرض سعر معتمد"
-                  : !contractCreated
-                    ? "أصدر العقد أولاً"
-                    : "حفظ وإصدار للتخطيط"}
+              {existingOrder
+                ? "تم الإصدار للتخطيط مسبقاً ✓"
+                : isSubmitting
+                  ? "جاري الإصدار..."
+                  : !collectionInfo.hasApprovedQuotation
+                    ? "لا يوجد عرض سعر معتمد"
+                    : !contractCreated
+                      ? "أصدر العقد أولاً"
+                      : "حفظ وإصدار للتخطيط"}
             </button>
-
-            {/* ==================================================
-                Send Contract For Approval
-            ================================================== */}
 
             <button
               onClick={handleSendContractForApproval}
               disabled={
-                isSendingContract || !collectionInfo.hasApprovedQuotation
-              }
-              className={`text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto ${
-                isSendingContract || !collectionInfo.hasApprovedQuotation
-                  ? "bg-slate-400 cursor-not-allowed"
-                  : "bg-emerald-600 hover:bg-emerald-700"
-              }`}
+                isSendingContract ||
+                !collectionInfo.hasApprovedQuotation ||
+                !!existingOrder
+              } // 💡 تعطيل الاعتماد لو الأوردر شغال خلاص
+              className={`text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto ${isSendingContract || !collectionInfo.hasApprovedQuotation || !!existingOrder ? "bg-slate-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"}`}
             >
               {isSendingContract
                 ? "جاري الإرسال..."
@@ -1317,44 +870,57 @@ const StartOrder = () => {
           </div>
 
           {/* ==================================================
-              Status Message
+              Status Messages
           ================================================== */}
 
-          {!collectionInfo.hasApprovedQuotation && (
-            <div className="mt-5 p-4 rounded-xl bg-red-50 border border-red-200 text-right">
-              <div className="font-bold text-red-700 mb-1">
-                لا يمكن المتابعة
+          {/* 💡 الرسالة الجديدة لو الأوردر شغال */}
+          {existingOrder ? (
+            <div className="mt-5 p-4 rounded-xl bg-blue-50 border border-blue-200 text-right">
+              <div className="font-bold text-blue-700 mb-1">
+                أمر التشغيل نشط بالمصنع 🏭
               </div>
-
-              <div className="text-sm text-red-600">
-                يجب وجود عرض سعر معتمد لهذا الكولكشن قبل إصدار العقد أو أمر
-                التشغيل.
-              </div>
-            </div>
-          )}
-
-          {collectionInfo.hasApprovedQuotation && !contractCreated && (
-            <div className="mt-5 p-4 rounded-xl bg-amber-50 border border-amber-200 text-right">
-              <div className="font-bold text-amber-700 mb-1">خطوة متبقية</div>
-
-              <div className="text-sm text-amber-600">
-                تم اعتماد عرض السعر. قم بإصدار عقد العميل أولاً حتى تتمكن من
-                إصدار أمر التشغيل للتخطيط.
+              <div className="text-sm text-blue-600">
+                تم إصدار أمر التشغيل وهو الآن قيد التنفيذ في قسم التخطيط
+                والمصنع. يمكنك طباعة ملفات الأوامر والعقود بحرية دون الحاجة
+                لإعادة الإصدار.
               </div>
             </div>
-          )}
-
-          {collectionInfo.hasApprovedQuotation && contractCreated && (
-            <div className="mt-5 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-right">
-              <div className="font-bold text-emerald-700 mb-1">
-                جاهز لإصدار أمر التشغيل ✓
-              </div>
-
-              <div className="text-sm text-emerald-600">
-                عرض السعر معتمد والعقد تم إصداره. يمكنك الآن إرسال أمر التشغيل
-                إلى التخطيط.
-              </div>
-            </div>
+          ) : (
+            <>
+              {!collectionInfo.hasApprovedQuotation && (
+                <div className="mt-5 p-4 rounded-xl bg-red-50 border border-red-200 text-right">
+                  <div className="font-bold text-red-700 mb-1">
+                    لا يمكن المتابعة
+                  </div>
+                  <div className="text-sm text-red-600">
+                    يجب وجود عرض سعر معتمد لهذا الكولكشن قبل إصدار العقد أو أمر
+                    التشغيل.
+                  </div>
+                </div>
+              )}
+              {collectionInfo.hasApprovedQuotation && !contractCreated && (
+                <div className="mt-5 p-4 rounded-xl bg-amber-50 border border-amber-200 text-right">
+                  <div className="font-bold text-amber-700 mb-1">
+                    خطوة متبقية
+                  </div>
+                  <div className="text-sm text-amber-600">
+                    تم اعتماد عرض السعر. قم بإصدار عقد العميل أولاً حتى تتمكن من
+                    إصدار أمر التشغيل للتخطيط.
+                  </div>
+                </div>
+              )}
+              {collectionInfo.hasApprovedQuotation && contractCreated && (
+                <div className="mt-5 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-right">
+                  <div className="font-bold text-emerald-700 mb-1">
+                    جاهز لإصدار أمر التشغيل ✓
+                  </div>
+                  <div className="text-sm text-emerald-600">
+                    عرض السعر معتمد والعقد تم إصداره. يمكنك الآن إرسال أمر
+                    التشغيل إلى التخطيط.
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
