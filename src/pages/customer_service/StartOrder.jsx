@@ -215,7 +215,7 @@ const StartOrder = () => {
     const fetchRealData = async () => {
       setIsLoading(true);
       try {
-        // 💡 التعديل هنا: جلبنا production_orders من الداتابيز عشان نتأكد
+        // 💡 1. استعلام يجيب الـ Snapshot (original_series_counts)
         const { data: orderData, error } = await supabase
           .from("collections")
           .select(
@@ -223,7 +223,7 @@ const StartOrder = () => {
               id, name,
               brands ( name_ar, name_en ),
               quotations ( id, quotation_number, total_sales_price, status ),
-              production_orders ( id, status ),
+              production_orders ( id, status, original_series_counts ),
               models (
                 id, model_number, name, image_url, colors,
                 tech_packs ( content ),
@@ -245,13 +245,15 @@ const StartOrder = () => {
         const approvedQuotation =
           orderData.quotations?.find((q) => q.status === "approved") || null;
 
-        // 💡 التعديل هنا: لو الأوردر موجود، يبقى العقد اكيد اتعمل، هنخليها true اجباري
         const savedContractStatus = sessionStorage.getItem(
           `contract_created_${orderData.id}`,
         );
         const hasCreatedContract =
           !!prodOrder || savedContractStatus === "true";
         setContractCreated(hasCreatedContract);
+
+        // 💡 2. استخراج اللقطة المحفوظة مسبقاً (Snapshot)
+        const savedQuantities = prodOrder?.original_series_counts || null;
 
         /* ======================================================
            Models
@@ -329,6 +331,7 @@ const StartOrder = () => {
             fabric,
             weight,
             approvedPrice: price,
+            actualDbId: model.id,
           };
         });
 
@@ -347,16 +350,24 @@ const StartOrder = () => {
 
         setCollectionInfo(formattedData);
 
+        // 💡 3. بناء الـ seriesCounts بالاعتماد على اللقطة (Snapshot)
         const initialCounts = {};
         formattedData.models.forEach((model) => {
           initialCounts[model.id] = {};
           model.variants.forEach((variant) => {
             initialCounts[model.id][variant.variantKey] = {};
             model.sizes.forEach((size) => {
-              initialCounts[model.id][variant.variantKey][size] = 5;
+              // بنقرا من اللقطة المحفوظة مباشرة
+              const snapQty =
+                savedQuantities?.[model.id]?.[variant.variantKey]?.[size];
+
+              // لو لقينا داتا هنحطها، لو لأ نحط 5
+              initialCounts[model.id][variant.variantKey][size] =
+                snapQty !== undefined ? snapQty : 5;
             });
           });
         });
+
         setSeriesCounts(initialCounts);
       } catch (error) {
         console.error("خطأ في جلب بيانات أمر التشغيل:", error);

@@ -328,6 +328,7 @@ export const handleIssueOrderToPlanning = async (
           total_quantity: grandTotalQty,
           total_amount: grandTotalAmount,
           updated_at: new Date().toISOString(),
+          original_series_counts: seriesCounts,
         })
         .eq("id", orderId);
 
@@ -355,6 +356,7 @@ export const handleIssueOrderToPlanning = async (
             order_number: `PO-${collectionInfo.brandCode}-${new Date().getFullYear()}-${Math.floor(
               1000 + Math.random() * 9000
             )}`,
+            original_series_counts: seriesCounts,
           })
           .select()
           .single();
