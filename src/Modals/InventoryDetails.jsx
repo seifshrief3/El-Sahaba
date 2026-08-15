@@ -160,12 +160,6 @@ const InventoryDetails = ({ selectedItem, setSelectedItem }) => {
                   {selectedItem.color}
                 </span>
               </div>
-              <div className="flex justify-between bg-white p-4">
-                <span className="text-slate-500">عدد الكراتين (تقريبي)</span>
-                <span className="font-bold text-slate-800">
-                  {Math.ceil(selectedItem.available / 50)} كرتونة
-                </span>
-              </div>
             </div>
           </div>
 

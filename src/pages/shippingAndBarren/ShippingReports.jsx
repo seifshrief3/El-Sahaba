@@ -39,8 +39,12 @@ export default function ShippingReports() {
 
   const printRef = useRef();
 
-  // تحديث قائمة التقارير اللي بتحتاج تواريخ عشان تشمل تقرير الأداء
-  const reportsRequiringDates = ["shipments_report", "performance_report"];
+  const reportsRequiringDates = [
+    "inventory_report",
+    "shipments_report",
+    "performance_report",
+  ];
+
   const isDateNeeded = reportsRequiringDates.includes(reportType);
 
   useEffect(() => {
@@ -113,24 +117,41 @@ export default function ShippingReports() {
         date_to: isDateNeeded ? dateTo : null,
       };
 
-      await fetch(webhookUrl, {
+      // 1. إرسال الطلب لـ n8n
+      const response = await fetch(webhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      setTimeout(() => {
-        toast.success("تم توليد التقرير بنجاح! ✨");
-        fetchRecentReports();
-        setIsLoading(false);
-      }, 4000);
+      // 2. التحقق من الاستجابة (لو مسار الـ False اشتغل وn8n رجع 400)
+      if (!response.ok) {
+        let errorMessage = "حدث خطأ أثناء توليد التقرير.";
+        try {
+          // قراءة الـ JSON اللي إنت عملته في الـ Respond to Webhook
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          console.log("No JSON error returned");
+        }
+        // إيقاف التنفيذ ورمي الخطأ للـ catch
+        throw new Error(errorMessage);
+      }
+
+      // 3. لو مسار الـ True اشتغل وn8n رجع 200 OK (التقرير اتعمل)
+      toast.success("تم توليد التقرير بنجاح! ✨");
+      fetchRecentReports(); // تحديث القائمة بالتقرير الجديد
     } catch (error) {
       console.error("Error generating report:", error);
-      toast.error("حدث خطأ أثناء توليد التقرير");
+      // عرض رسالة الخطأ اللي جات من n8n للمستخدم
+      toast.error(
+        error.message || "حدث خطأ، لا توجد بيانات كافية لتوليد التقرير.",
+      );
+    } finally {
+      // قفل علامة التحميل في كل الأحوال (سواء نجح أو فشل)
       setIsLoading(false);
     }
   };
-
   const handleViewReport = (report) => {
     setSelectedReport(report);
     setIsModalOpen(true);

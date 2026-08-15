@@ -239,8 +239,13 @@ const StartOrder = () => {
         /* ======================================================
            Check Existing Order
         ====================================================== */
-        const prodOrder = orderData.production_orders?.[0] || null;
-        setExistingOrder(prodOrder);
+        // 💡 التعديل هنا: لو الأوردر ملغي (cancelled) مش بنحطه في existingOrder
+        const activeProdOrder = orderData.production_orders?.find(
+          (order) =>
+            order.status !== "cancelled" && order.status !== "canceled",
+        );
+
+        setExistingOrder(activeProdOrder || null);
 
         const approvedQuotation =
           orderData.quotations?.find((q) => q.status === "approved") || null;
@@ -248,12 +253,14 @@ const StartOrder = () => {
         const savedContractStatus = sessionStorage.getItem(
           `contract_created_${orderData.id}`,
         );
+
+        // 💡 التعديل هنا: العقد بيعتبر موجود لو الأوردر شغال (مش ملغي)
         const hasCreatedContract =
-          !!prodOrder || savedContractStatus === "true";
+          !!activeProdOrder || savedContractStatus === "true";
         setContractCreated(hasCreatedContract);
 
-        // 💡 2. استخراج اللقطة المحفوظة مسبقاً (Snapshot)
-        const savedQuantities = prodOrder?.original_series_counts || null;
+        // 💡 التعديل هنا: نجيب اللقطة القديمة (لو موجودة) بس لو الأوردر نشط
+        const savedQuantities = activeProdOrder?.original_series_counts || null;
 
         /* ======================================================
            Models
@@ -508,6 +515,15 @@ const StartOrder = () => {
   const handleSendContractForApproval = async () => {
     if (!collectionInfo?.hasApprovedQuotation)
       return toast.error("لا يمكن إرسال العقد بدون عرض سعر معتمد.");
+    if (!contractCreated)
+      return toast.error(
+        "لا يمكن إرسال العقد للاعتماد قبل إصداره وطباعته (PDF) أولاً.",
+      );
+
+    if (hasInvalidSeries())
+      return toast.error(
+        "برجاء التأكد من تحديد عدد سريهات أكبر من صفر لكل Variant ولكل مقاس.",
+      );
     if (hasInvalidSeries())
       return toast.error(
         "برجاء التأكد من تحديد عدد سريهات أكبر من صفر لكل Variant ولكل مقاس.",
@@ -863,20 +879,33 @@ const StartOrder = () => {
                       : "حفظ وإصدار للتخطيط"}
             </button>
 
+            {/* ==================================================
+                Send Contract For Approval
+            ================================================== */}
             <button
               onClick={handleSendContractForApproval}
               disabled={
                 isSendingContract ||
                 !collectionInfo.hasApprovedQuotation ||
+                !contractCreated || // 💡 التعديل: قفل الزرار لو مفيش عقد
                 !!existingOrder
-              } // 💡 تعطيل الاعتماد لو الأوردر شغال خلاص
-              className={`text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto ${isSendingContract || !collectionInfo.hasApprovedQuotation || !!existingOrder ? "bg-slate-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"}`}
+              }
+              className={`text-white px-8 py-3 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto ${
+                isSendingContract ||
+                !collectionInfo.hasApprovedQuotation ||
+                !contractCreated ||
+                !!existingOrder
+                  ? "bg-slate-400 cursor-not-allowed"
+                  : "bg-emerald-600 hover:bg-emerald-700"
+              }`}
             >
               {isSendingContract
                 ? "جاري الإرسال..."
                 : !collectionInfo.hasApprovedQuotation
                   ? "لا يوجد عرض سعر معتمد"
-                  : "إرسال العقد للاعتماد"}
+                  : !contractCreated
+                    ? "أصدر العقد أولاً" // 💡 هيظهرله الكلمة دي لو لسه معملش العقد
+                    : "إرسال العقد للاعتماد"}
             </button>
           </div>
 

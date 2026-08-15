@@ -71,7 +71,6 @@ const getModelTotal = (model, seriesCount) => {
 
 const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
   const [brandRepresentative, setBrandRepresentative] = React.useState("");
-  console.log(data);
   const [isLoadingRepresentative, setIsLoadingRepresentative] =
     React.useState(false);
 
@@ -83,6 +82,7 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
       }
 
       try {
+        setIsLoadingRepresentative(true);
         // 1. نجيب الـ brand_id من الكولكشن
         const { data: collection, error: collectionError } = await supabase
           .from("collections")
@@ -120,16 +120,20 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
       } catch (error) {
         console.error("Error fetching brand representative:", error);
         setBrandRepresentative("");
+      } finally {
+        setIsLoadingRepresentative(false);
       }
     };
 
     fetchBrandRepresentative();
   }, [data?.id]);
+
   if (!data) return null;
 
   let grandTotalQty = 0;
-  let grandTotalValue = 0; // ده إجمالي قيمة العقد الحقيقي اللي هيتكتب في طريقة السداد تحت
-  let sumOfUnitPrices = 0; // 💡 ده مجموع أسعار الوحدة اللي هيظهر في الجدول
+
+  // 💡 المتغير ده هيشيل (مجموع أسعار الوحدات) وهيستخدم في الجدول تحت وفي الديباجة مع بعض
+  let grandTotalValue = 0;
 
   const allColors = new Set();
   const allSizes = new Set();
@@ -146,11 +150,10 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
       allSizes.add(safeText(size));
     });
 
-    // 💡 تجميع سعر الوحدة للجدول
     const unitPrice = Number(model.approvedPrice) || 0;
-    sumOfUnitPrices += unitPrice;
 
-    let currentModelQty = 0;
+    // 💡 تجميع أسعار الوحدات فقط للحصول على الإجمالي (زي 792.00)
+    grandTotalValue += unitPrice;
 
     variants.forEach((variant) => {
       const part = getVariantPart(variant);
@@ -164,17 +167,15 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
         const quantity =
           Number(seriesCount?.[model.id]?.[variant.variantKey]?.[size]) || 0;
 
-        currentModelQty += quantity;
         grandTotalQty += quantity;
       });
     });
-
-    // 💡 حساب قيمة العقد الإجمالية (الكمية × السعر) عشان الدفعات
-    grandTotalValue += currentModelQty * unitPrice;
   });
 
+  // 💡 حساب الدفعات بناءً على مجموع أسعار الوحدات (grandTotalValue)
   const advancePayment = grandTotalValue / 2;
   const remainingPayment = grandTotalValue / 2;
+
   const dateObj = new Date();
   const dayName = dateObj.toLocaleDateString("ar-EG", { weekday: "long" });
   const formattedDate = dateObj.toLocaleDateString("en-GB");
@@ -271,7 +272,6 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
       <div className="flex justify-between items-center mb-3">
         <div className="w-24 flex justify-start">
-          {/* 💡 لوجو البراند هيظهر هنا لو موجود في الداتا */}
           {data.brandLogo && (
             <img
               src={data.brandLogo}
@@ -401,9 +401,8 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
               المقاسات: {Array.from(allSizes).join(" - ")}
             </td>
 
-            {/* 💡 التعديل هنا: عرض مجموع أسعار الوحدة فقط */}
             <td className="font-black text-[#b91c1c] text-[11px]">
-              {sumOfUnitPrices.toLocaleString(undefined, {
+              {grandTotalValue.toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}
@@ -501,7 +500,6 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
         <tbody>
           <tr>
             <td className="term-title">موضوع العقد</td>
-
             <td>
               يتعهد الطرف الأول بتصنيع وتوريد الكمية والمواصفات الموضحة أعلاه
               للطرف الثاني، وفق آلية العمل المعتمدة لدى الشركة (اعتماد التصميم،
@@ -512,7 +510,6 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
           <tr>
             <td className="term-title">الكميات</td>
-
             <td>
               يحق للطرف الأول تسليم الكمية المتعاقد عليها بنسبة سماحية زيادة أو
               نقصاً لا تتجاوز ±3%، مع إجراء التسوية المالية المقابلة وفقاً لسعر
@@ -522,23 +519,29 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
           <tr>
             <td className="term-title">السعر وطريقة السداد</td>
-
             <td>
               السعر الإجمالي{" "}
-              {grandTotalValue.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}{" "}
+              {/* 💡 التعديل هنا: استخدام grandTotalValue اللي بتمثل 792 */}
+              <span className="font-bold">
+                {grandTotalValue.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>{" "}
               جنيه مصري، يُسدد على دفعتين: 50% دفعة مقدمة (
-              {advancePayment.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}{" "}
+              <span className="font-bold">
+                {advancePayment.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>{" "}
               ج.م) عند التوقيع، و50% الباقي (
-              {remainingPayment.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}{" "}
+              <span className="font-bold">
+                {remainingPayment.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>{" "}
               ج.م) قبل التسليم النهائي. لا يبدأ التنفيذ الفعلي إلا بعد استلام
               الدفعة المقدمة كاملة.
             </td>
@@ -546,7 +549,6 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
           <tr>
             <td className="term-title">مدة التنفيذ والتسليم</td>
-
             <td>
               يلتزم الطرف الأول بتسليم الطلب كاملاً في الموعد المتفق عليه، وتبدأ
               مدة التنفيذ من تاريخ استلام الدفعة المقدمة واعتماد العينة
@@ -556,7 +558,6 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
           <tr>
             <td className="term-title">الضمان</td>
-
             <td>
               يضمن الطرف الأول سلامة القطع المصنعة من عيوب التصنيع فقط، لمدة
               ____ يوماً من تاريخ التسليم الفعلي.
@@ -565,7 +566,6 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
           <tr>
             <td className="term-title">الاستلام والاستبدال</td>
-
             <td>
               يوقع الطرفان عند التسليم على محضر استلام يثبت الكمية المسلمة
               وحالتها.
@@ -574,7 +574,6 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
           <tr>
             <td className="term-title">التعديلات</td>
-
             <td>
               أي طلب تعديل على المواصفات أو الكميات بعد اعتماد العينة و/أو بدء
               الإنتاج يُحتسب له تكلفة إضافية ويمدد أجل التنفيذ بما يلزم.
@@ -583,7 +582,6 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
           <tr>
             <td className="term-title">القوة القاهرة والسرية</td>
-
             <td>
               لا يُعد أي من الطرفين مخالفاً لالتزاماته حال تعذر التنفيذ لظروف
               قاهرة خارجة عن إرادته. ويلتزم الطرفان بسرية كافة المعلومات
@@ -593,7 +591,6 @@ const ContractPDFTemplate = React.forwardRef(({ data, seriesCount }, ref) => {
 
           <tr>
             <td className="term-title">القانون المختص ونسخ العقد</td>
-
             <td>
               يخضع الطرفان للقوانين المعمول بها في __________، وتختص بالفصل في
               أي نزاع محاكم __________.

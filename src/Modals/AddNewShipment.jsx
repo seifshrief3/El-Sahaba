@@ -216,19 +216,14 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
     setIsLoadingCollection(true);
 
     try {
-      // ========================================================
       // 1. جلب الموديلات
-      // ========================================================
-
       const { data: modelsData, error: modelsError } = await supabase
         .from("models")
         .select("id, model_number, name, collection_id")
         .eq("collection_id", collectionId)
         .order("model_number");
 
-      if (modelsError) {
-        throw modelsError;
-      }
+      if (modelsError) throw modelsError;
 
       if (!modelsData || modelsData.length === 0) {
         setCollectionModels([]);
@@ -236,182 +231,96 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
         return;
       }
 
-      // ========================================================
       // 2. جلب المقاسات
-      // ========================================================
-
       const { data: sizesData, error: sizesError } = await supabase
         .from("sizes")
         .select("id, name, sort_order")
         .order("sort_order");
 
-      if (sizesError) {
-        throw sizesError;
-      }
+      if (sizesError) throw sizesError;
 
       const sizeMap = {};
-
       (sizesData || []).forEach((size) => {
         sizeMap[String(size.id)] = {
           name: size.name,
           sort_order: size.sort_order,
         };
-
         sizeMap[String(size.name)] = {
           name: size.name,
           sort_order: size.sort_order,
         };
       });
 
-      // ========================================================
-      // 3. جلب أمر التشغيل
-      // ========================================================
+      // 💡 3. جلب المخزون الحقيقي من الداتابيز هنا بدري
+      const modelIds = modelsData.map((m) => m.id);
+      const { data: inventoryData, error: invError } = await supabase
+        .from("inventory")
+        .select("model_id, size, available_qty")
+        .in("model_id", modelIds);
 
+      if (invError) throw invError;
+
+      // 4. جلب أمر التشغيل
       const { data: orderData, error: orderError } = await supabase
         .from("production_orders")
         .select(
-          `
-            id,
-            collection_id,
-            order_number,
-            status,
-            total_quantity,
-            total_amount
-          `,
+          `id, collection_id, order_number, status, total_quantity, total_amount`,
         )
         .eq("collection_id", collectionId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (orderError) {
-        throw orderError;
-      }
+      if (orderError) throw orderError;
 
       if (!orderData) {
         toast.error("لا يوجد أمر تشغيل لهذا الكولكشن.");
         setProductionOrder(null);
-        setProductionOrderItems([]);
       } else {
         setProductionOrder(orderData);
-
-        // ======================================================
-        // 4. جلب Production Order Items
-        // ======================================================
-
-        const { data: orderItemsData, error: orderItemsError } = await supabase
-          .from("production_order_items")
-          .select(
-            `
-                id,
-                production_order_id,
-                model_id,
-                variant_key,
-                selling_price,
-                total_quantity,
-                part,
-                color
-              `,
-          )
-          .eq("production_order_id", orderData.id);
-
-        if (orderItemsError) {
-          throw orderItemsError;
-        }
-
-        const itemIds = (orderItemsData || []).map((item) => item.id);
-
-        // ======================================================
-        // 5. جلب كميات المقاسات من أمر التشغيل
-        // ======================================================
-
-        let orderSizeRows = [];
-
-        if (itemIds.length > 0) {
-          const { data: sizeRowsData, error: sizeRowsError } = await supabase
-            .from("production_order_item_sizes")
-            .select(
-              `
-                  id,
-                  production_order_item_id,
-                  size_id,
-                  quantity
-                `,
-            )
-            .in("production_order_item_id", itemIds);
-
-          if (sizeRowsError) {
-            throw sizeRowsError;
-          }
-
-          orderSizeRows = sizeRowsData || [];
-        }
-
-        // ======================================================
-        // 6. ربط المقاسات بالـ Items
-        // ======================================================
-
-        const preparedOrderItems = (orderItemsData || []).map((item) => {
-          const sizeRows = orderSizeRows
-            .filter((row) => row.production_order_item_id === item.id)
-            .map((row) => {
-              const sizeInfo = sizeMap[String(row.size_id)];
-
-              return {
-                size_id: row.size_id,
-                size_name: sizeInfo?.name || String(row.size_id),
-                quantity: Number(row.quantity || 0),
-                sort_order: sizeInfo?.sort_order ?? 999,
-              };
-            })
-            .sort((a, b) => a.sort_order - b.sort_order);
-
-          return {
-            ...item,
-            sizeRows,
-          };
-        });
-
-        setProductionOrderItems(preparedOrderItems);
-
-        // ======================================================
-        // 7. تجهيز الموديلات للعرض
-        // ======================================================
-
-        const modelsWithSizes = modelsData.map((model) => {
-          const modelItems = preparedOrderItems.filter(
-            (item) => item.model_id === model.id,
-          );
-
-          const sizeMapForModel = {};
-
-          modelItems.forEach((item) => {
-            item.sizeRows.forEach((sizeRow) => {
-              if (!sizeMapForModel[sizeRow.size_name]) {
-                sizeMapForModel[sizeRow.size_name] = {
-                  name: sizeRow.size_name,
-                  sort_order: sizeRow.sort_order,
-                };
-              }
-            });
-          });
-
-          const sizes = Object.values(sizeMapForModel).sort(
-            (a, b) => a.sort_order - b.sort_order,
-          );
-
-          return {
-            ...model,
-            sizes,
-            sizeCount: sizes.length,
-          };
-        });
-
-        setCollectionModels(modelsWithSizes);
       }
+
+      // 5. تجهيز الموديلات وربطها بالمخزون
+      const modelsWithSizes = modelsData.map((model) => {
+        // فلترة المخزون الخاص بالموديل ده
+        const modelInventory = (inventoryData || []).filter(
+          (item) => item.model_id === model.id,
+        );
+
+        const sizeMapForModel = {};
+
+        modelInventory.forEach((item) => {
+          const sizeName =
+            sizeMap[String(item.size)]?.name || String(item.size);
+
+          if (!sizeMapForModel[sizeName]) {
+            sizeMapForModel[sizeName] = {
+              name: sizeName,
+              sort_order: sizeMap[String(item.size)]?.sort_order ?? 999,
+              availableQty: 0, // هنجمع هنا
+            };
+          }
+          // تجميع الكميات المتاحة للمقاس ده (لو متكرر بألوان مختلفة نجمعه)
+          sizeMapForModel[sizeName].availableQty += Number(
+            item.available_qty || 0,
+          );
+        });
+
+        const sizes = Object.values(sizeMapForModel).sort(
+          (a, b) => a.sort_order - b.sort_order,
+        );
+
+        return {
+          ...model,
+          sizes,
+          sizeCount: sizes.length,
+        };
+      });
+
+      setCollectionModels(modelsWithSizes);
     } catch (error) {
       console.error("Error loading collection:", error);
-      toast.error("حدث خطأ أثناء تحميل بيانات الكولكشن وأمر التشغيل.");
+      toast.error("حدث خطأ أثناء تحميل بيانات الكولكشن.");
     } finally {
       setIsLoadingCollection(false);
     }
@@ -554,30 +463,29 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
   // ============================================================
 
   const totalSeries = useMemo(() => {
-    if (
-      selectedModels.length === 0 ||
-      commonSizes.length === 0 ||
-      productionOrderItems.length === 0
-    ) {
+    if (selectedModels.length === 0 || commonSizes.length === 0) {
       return 0;
     }
 
-    const allSeriesValues = [];
+    const allAvailableQuantities = [];
 
     selectedModels.forEach((model) => {
-      commonSizes.forEach((size) => {
-        const quantity = getOrderSeriesForModelSize(model.id, size.name);
+      commonSizes.forEach((commonSize) => {
+        // بندور على المقاس ده في الموديل وبنجيب الكمية المتاحة
+        const modelSizeData = model.sizes.find(
+          (s) => s.name === commonSize.name,
+        );
+        const available = modelSizeData ? modelSizeData.availableQty : 0;
 
-        allSeriesValues.push(quantity);
+        allAvailableQuantities.push(available);
       });
     });
 
-    if (allSeriesValues.length === 0) {
-      return 0;
-    }
+    if (allAvailableQuantities.length === 0) return 0;
 
-    return Math.min(...allSeriesValues);
-  }, [selectedModels, commonSizes, productionOrderItems]);
+    // السري هو أقل كمية متاحة من أي قطعة في الطقم
+    return Math.min(...allAvailableQuantities);
+  }, [selectedModels, commonSizes]);
 
   // ============================================================
   // عدد القطع في السري الواحد
@@ -1495,6 +1403,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
                               {/* السريهات الحقيقية */}
 
+                              {/* السريهات الحقيقية */}
                               <div className="rounded-xl bg-[#1a365d] p-4 text-center text-white">
                                 <p className="text-xs text-blue-100">
                                   السريهات المتاحة
@@ -1504,8 +1413,9 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                                   {totalSeries}
                                 </p>
 
+                                {/* 💡 التعديل هنا: اتغيرت الكلمة للمخزن */}
                                 <p className="mt-1 text-[10px] text-blue-100">
-                                  من أمر التشغيل
+                                  جاهزة في المخزن
                                 </p>
                               </div>
 

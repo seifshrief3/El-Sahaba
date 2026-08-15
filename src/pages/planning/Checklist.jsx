@@ -63,8 +63,17 @@ const Checklist = () => {
       setOrderItems(poData.production_order_items || []);
 
       let totalQty = 0;
+      let totalDelivered = 0; // 💡 إجمالي اللي اتسلم من الأوردر كله
+      let totalRemaining = 0; // 💡 إجمالي المتبقي من الأوردر كله
+
       poData.production_order_items?.forEach((item) => {
         totalQty += Number(item.total_quantity) || 0;
+
+        // حساب المسلم والمتبقي من كل مقاس جوه الـ item
+        item.production_order_item_sizes?.forEach((sizeRow) => {
+          totalDelivered += Number(sizeRow.delivered_qty) || 0;
+          totalRemaining += Number(sizeRow.remaining_qty) || 0;
+        });
       });
 
       const sizesSet = new Set();
@@ -75,7 +84,6 @@ const Checklist = () => {
       });
       const uniqueSizes = Array.from(sizesSet);
 
-      // 💡 قراءة الموديلات من جوه collections بشكل صحيح
       const models = poData.collections?.models || [];
       const modelsWithMaterials = models.map((model) => {
         const materials = (model.model_materials || []).map((mm) => ({
@@ -88,15 +96,32 @@ const Checklist = () => {
       });
 
       const modelColorQuantities = {};
+
       poData.production_order_items?.forEach((item) => {
         const modelId = item.model_id;
         const color = item.color || "لون غير محدد";
         const quantity = Number(item.total_quantity) || 0;
 
+        // 💡 حساب المسلم والمتبقي لكل لون جوه الموديل عشان نعرضهم في الـ UI
+        let deliveredForThisColor = 0;
+        let remainingForThisColor = 0;
+        item.production_order_item_sizes?.forEach((sizeRow) => {
+          deliveredForThisColor += Number(sizeRow.delivered_qty) || 0;
+          remainingForThisColor += Number(sizeRow.remaining_qty) || 0;
+        });
+
         if (!modelColorQuantities[modelId]) modelColorQuantities[modelId] = {};
-        if (!modelColorQuantities[modelId][color])
-          modelColorQuantities[modelId][color] = 0;
-        modelColorQuantities[modelId][color] += quantity;
+        if (!modelColorQuantities[modelId][color]) {
+          modelColorQuantities[modelId][color] = {
+            quantity: 0,
+            delivered: 0,
+            remaining: 0,
+          };
+        }
+
+        modelColorQuantities[modelId][color].quantity += quantity;
+        modelColorQuantities[modelId][color].delivered += deliveredForThisColor;
+        modelColorQuantities[modelId][color].remaining += remainingForThisColor;
       });
 
       const modelsWithQuantities = modelsWithMaterials.map((model) => ({
@@ -111,6 +136,8 @@ const Checklist = () => {
         collectionName: poData.collections?.name || "غير محدد",
         brandName: poData.collections?.brands?.name_ar || "غير محدد",
         totalQty,
+        totalDelivered, // 💡 حفظ الإجمالي المسلم
+        totalRemaining, // 💡 حفظ الإجمالي المتبقي
         sizes: uniqueSizes,
         models: modelsWithQuantities,
       });
@@ -175,6 +202,15 @@ const Checklist = () => {
         { onConflict: "production_order_id, stage_id" },
       );
       if (error) throw error;
+
+      // 💡 حل مشكلة البج: لو أول مرحلة بقت in_progress، نتأكد إن الأوردر كله in_progress
+      if (newStatus === "in_progress" || newStatus === "completed") {
+        await supabase
+          .from("production_orders")
+          .update({ status: "in_progress" })
+          .eq("id", orderInfo.productionOrderId);
+      }
+
       if (newStatus === "completed") toast.success("تم تحديث المرحلة بنجاح ✓");
     } catch (error) {
       console.error("Error updating status:", error);
@@ -207,10 +243,16 @@ const Checklist = () => {
   // 💡 دوال التسليم (الجزئي والكلي)
   // ==========================================
 
-  // دالة الإرسال الفعلية المشتركة في الداتابيز (النسخة السريعة)
+  // دالة الإرسال الفعلية المشتركة في الداتابيز
   const executeDelivery = async (itemsToDeliver) => {
     setIsDelivering(true);
     try {
+      // 💡 حل المشكلة: إجبار الداتابيز إن حالة الأوردر تكون in_progress وقت التسليم عشان ميرجعش pending
+      await supabase
+        .from("production_orders")
+        .update({ status: "in_progress" })
+        .eq("id", orderInfo.productionOrderId);
+
       const deliveryNumber = `DEL-${Math.floor(1000 + Math.random() * 9000)}`;
 
       // 1. إنشاء الدفعة الأساسية
@@ -226,7 +268,7 @@ const Checklist = () => {
 
       if (deliveryError) throw deliveryError;
 
-      // 2. إدراج كل العناصر دفعة واحدة (Bulk Insert) - دي أسرع من اللوب بكتير
+      // 2. إدراج كل العناصر دفعة واحدة (Bulk Insert)
       const deliveryItemsPayload = itemsToDeliver.map((item) => ({
         delivery_id: deliveryRecord.id,
         production_order_item_size_id: item.id,
@@ -239,7 +281,7 @@ const Checklist = () => {
 
       if (itemsError) throw itemsError;
 
-      // 3. تحديث الكميات في المقاسات (باستخدام Promise.all للتوازي) 🚀
+      // 3. تحديث الكميات في المقاسات
       const updatePromises = itemsToDeliver.map((item) => {
         const currentSizeObj = orderItems
           .flatMap((i) => i.production_order_item_sizes)
@@ -247,14 +289,12 @@ const Checklist = () => {
 
         const newDeliveredQty = (currentSizeObj?.delivered_qty || 0) + item.qty;
 
-        // بنرجع الـ Promise من غير ما نستناه هنا
         return supabase
           .from("production_order_item_sizes")
           .update({ delivered_qty: newDeliveredQty })
           .eq("id", item.id);
       });
 
-      // بننفذ كل التحديثات في نفس اللحظة ونستنى نتيجتهم كلهم
       await Promise.all(updatePromises);
 
       // 4. إرسال الإشعار
@@ -276,7 +316,6 @@ const Checklist = () => {
     }
   };
 
-  // تسليم دفعة يدوية بالمقاسات
   const submitDeliveryBatch = async () => {
     const itemsToDeliver = Object.entries(deliveryInputs)
       .map(([id, qty]) => ({ id, qty: Number(qty) }))
@@ -290,7 +329,6 @@ const Checklist = () => {
     await executeDelivery(itemsToDeliver);
   };
 
-  // 💡 تسليم كل الكميات المتبقية مرة واحدة
   const handleDeliverAllRemaining = async () => {
     const confirmAll = window.confirm(
       "هل أنت متأكد من تسليم كافة الكميات المتبقية بالكامل للمخزن مرة واحدة؟",
@@ -377,7 +415,6 @@ const Checklist = () => {
         </div>
 
         <div className="flex gap-3 w-full md:w-auto flex-wrap justify-end">
-          {/* 💡 زرار تسليم الكولكشن بالكامل */}
           <button
             onClick={handleDeliverAllRemaining}
             className="flex-1 md:flex-none text-center bg-[#1a365d] text-white hover:bg-blue-900 px-5 py-2.5 rounded-md text-sm font-bold transition shadow-sm"
@@ -385,7 +422,6 @@ const Checklist = () => {
             تسليم الكولكشن بالكامل
           </button>
 
-          {/* 💡 زرار إرسال الدفعة (يدوي) */}
           <button
             onClick={openDeliveryModal}
             className="flex-1 md:flex-none text-center bg-red-800 text-white hover:bg-red-900 px-5 py-2.5 rounded-md text-sm font-bold transition shadow-sm"
@@ -406,7 +442,7 @@ const Checklist = () => {
       {/* المحتوى */}
       {/* ======================= */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* بيانات الكولكشن */}
+        {/* بيانات الكولكشن (مع إضافة UX الإجماليات) */}
         <div className="lg:col-span-1 flex flex-col gap-6">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 sticky top-6">
             <h2 className="text-base font-bold text-[#1a365d] mb-4 border-b border-slate-100 pb-3">
@@ -438,14 +474,33 @@ const Checklist = () => {
             </div>
 
             <div className="space-y-5 text-sm text-right">
-              <div>
-                <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                  إجمالي الكمية المطلوبة
-                </span>
-                <span className="font-black text-2xl text-[#1a365d]">
-                  {orderInfo.totalQty.toLocaleString()}{" "}
-                  <span className="text-sm font-normal">قطعة</span>
-                </span>
+              {/* 💡 إضافة عرض الإجماليات بشكل منظم */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 gap-4 text-center">
+                <div className="col-span-2 pb-3 border-b border-slate-200">
+                  <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    إجمالي الكمية المطلوبة
+                  </span>
+                  <span className="font-black text-2xl text-[#1a365d]">
+                    {orderInfo.totalQty.toLocaleString()}{" "}
+                    <span className="text-sm font-normal">قطعة</span>
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-emerald-600 mb-1">
+                    إجمالي المُسلّم
+                  </span>
+                  <span className="font-black text-lg text-emerald-700">
+                    {orderInfo.totalDelivered.toLocaleString()}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-red-600 mb-1">
+                    إجمالي المُتبقي
+                  </span>
+                  <span className="font-black text-lg text-red-700">
+                    {orderInfo.totalRemaining.toLocaleString()}
+                  </span>
+                </div>
               </div>
 
               <div>
@@ -461,23 +516,34 @@ const Checklist = () => {
                         key={model.id}
                         className="border border-slate-200 rounded-lg overflow-hidden"
                       >
-                        <div className="bg-slate-50 px-3 py-2 border-b border-slate-200">
+                        <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 flex justify-between items-center">
                           <span className="font-black text-[#1a365d] text-sm">
                             {model.name}
                           </span>
                         </div>
                         <div className="divide-y divide-slate-100">
-                          {colors.map(([color, quantity], index) => (
+                          {colors.map(([color, stats], index) => (
                             <div
                               key={`${model.id}-${color}-${index}`}
-                              className="flex items-center justify-between px-3 py-2 bg-white"
+                              className="flex flex-col px-3 py-2 bg-white"
                             >
-                              <span className="text-xs font-bold text-slate-600">
-                                {color}
-                              </span>
-                              <span className="text-xs font-black text-[#1a365d]">
-                                {Number(quantity).toLocaleString()} قطعة
-                              </span>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-bold text-slate-600">
+                                  {color}
+                                </span>
+                                <span className="text-xs font-black text-[#1a365d]">
+                                  {Number(stats.quantity).toLocaleString()} قطعة
+                                </span>
+                              </div>
+                              {/* 💡 عرض المسلم والمتبقي لكل لون */}
+                              <div className="flex gap-2 justify-end text-[10px] font-bold">
+                                <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                  مُسلّم: {stats.delivered}
+                                </span>
+                                <span className="text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
+                                  مُتبقي: {stats.remaining}
+                                </span>
+                              </div>
                             </div>
                           ))}
                         </div>
