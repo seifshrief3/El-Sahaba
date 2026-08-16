@@ -321,10 +321,25 @@ export const handleIssueOrderToPlanning = async (
     if (existingOrder) {
       orderId = existingOrder.id;
 
+      // ============================================
+      // مهم:
+      // لا نعيد حالة أمر التشغيل إلى pending
+      // نحافظ على الـ status الحالي
+      // ============================================
+
+      const { data: currentOrder, error: currentOrderError } = await supabase
+        .from("production_orders")
+        .select("status")
+        .eq("id", orderId)
+        .single();
+
+      if (currentOrderError) {
+        throw currentOrderError;
+      }
+
       const { error: updateError } = await supabase
         .from("production_orders")
         .update({
-          status: "pending",
           total_quantity: grandTotalQty,
           total_amount: grandTotalAmount,
           updated_at: new Date().toISOString(),
@@ -334,15 +349,6 @@ export const handleIssueOrderToPlanning = async (
 
       if (updateError) {
         throw updateError;
-      }
-
-      const { error: deleteError } = await supabase
-        .from("production_order_items")
-        .delete()
-        .eq("production_order_id", orderId);
-
-      if (deleteError) {
-        throw deleteError;
       }
     } else {
       const { data: newOrder, error: insertError } =
