@@ -33,6 +33,9 @@ import {
   FileText,
   Search,
   LogOut,
+  Headset, // أيقونة خدمة العملاء
+  MessageCircle, // أيقونة للواتساب
+  TrendingUp,
 } from "lucide-react";
 import ElsahabaLogo from "../assets/logo.jpeg";
 
@@ -143,25 +146,23 @@ const StatCard = ({
   iconClass = "bg-blue-50 text-blue-600",
 }) => {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5 shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs md:text-sm font-bold text-slate-500">{title}</p>
-
-          <div className="text-2xl md:text-3xl font-black text-[#102A43] mt-2">
-            {formatNumber(value)}
-          </div>
-
-          {subtitle && (
-            <p className="text-[11px] text-slate-400 mt-1">{subtitle}</p>
-          )}
-        </div>
-
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <p className="text-xs md:text-sm font-bold text-slate-500">{title}</p>
         <div
-          className={`w-11 h-11 md:w-12 md:h-12 rounded-xl flex items-center justify-center ${iconClass}`}
+          className={`w-11 h-11 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0 ${iconClass}`}
         >
           <Icon size={22} />
         </div>
+      </div>
+      <div>
+        <div className="text-2xl md:text-3xl font-black text-[#102A43]">
+          {formatNumber(value)}
+        </div>
+
+        {subtitle && (
+          <p className="text-[11px] text-slate-400 mt-1">{subtitle}</p>
+        )}
       </div>
     </div>
   );
@@ -182,7 +183,7 @@ const StatusBadge = ({ status }) => {
 
 const EmptyState = ({ icon: Icon = Package, title, description }) => {
   return (
-    <div className="min-h-[220px] flex flex-col items-center justify-center text-center">
+    <div className="min-h-[220px] flex flex-col items-center justify-center text-center p-6">
       <div className="w-16 h-16 rounded-2xl bg-slate-50 text-slate-300 flex items-center justify-center mb-4">
         <Icon size={30} />
       </div>
@@ -380,11 +381,6 @@ const ClientDashboard = ({ clientId }) => {
 
       /* =====================================================
          Production Order Items
-
-         IMPORTANT:
-         No model_materials relation here.
-         This fixes:
-         column model_materials_2.material_name does not exist
       ===================================================== */
 
       let orderItemsData = [];
@@ -431,8 +427,6 @@ const ClientDashboard = ({ clientId }) => {
 
       /* =====================================================
          Shipments
-
-         No material relation involved.
       ===================================================== */
 
       const { data: shipmentsData, error: shipmentsError } = await supabase
@@ -529,6 +523,17 @@ const ClientDashboard = ({ clientId }) => {
     (shipment) =>
       shipment.status === "pending" || shipment.status === "partially_shipped",
   ).length;
+
+  // لحساب نسب الشارت
+  const shippingProgressPercentage =
+    totalProductionQuantity > 0
+      ? Math.round((totalShipped / totalProductionQuantity) * 100)
+      : 0;
+
+  const inventoryProgressPercentage =
+    totalProductionQuantity > 0
+      ? Math.round((inventorySummary.available / totalProductionQuantity) * 100)
+      : 0;
 
   /* =======================================================
      Collections Enriched
@@ -757,7 +762,7 @@ const ClientDashboard = ({ clientId }) => {
           Top Header
       =================================================== */}
 
-      <header className="bg-white shadow-sm sticky top-0 z-40">
+      <header className="bg-white border-b-4 border-[#DC2626] shadow-sm sticky top-0 z-40">
         <div className="max-w-[1600px] mx-auto px-4 md:px-7">
           <div className="h-20 flex items-center justify-between gap-4">
             {/* الجزء الأيمن: اللوجوهات (الصحابة + العميل) */}
@@ -893,6 +898,130 @@ const ClientDashboard = ({ clientId }) => {
 
         {activePage === "home" && (
           <div className="space-y-5">
+            {/* قسم المؤشرات الدائرية (Charts) وخدمة العملاء الجديد */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {/* Chart 1: Shipping Progress */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex items-center justify-between">
+                <div>
+                  <h3 className="font-black text-[#102A43] mb-1">
+                    نسبة إنجاز الشحن
+                  </h3>
+                  <p className="text-xs text-slate-500 font-bold">
+                    من إجمالي أوامر التشغيل
+                  </p>
+                  <div className="mt-4 font-black text-2xl text-emerald-600">
+                    {formatNumber(totalShipped)}{" "}
+                    <span className="text-sm font-medium text-slate-400">
+                      قطعة مشحونة
+                    </span>
+                  </div>
+                </div>
+                <div className="relative w-24 h-24 flex items-center justify-center">
+                  <svg
+                    className="w-full h-full transform -rotate-90"
+                    viewBox="0 0 36 36"
+                  >
+                    <path
+                      className="text-slate-100"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="text-emerald-500"
+                      strokeDasharray={`${shippingProgressPercentage}, 100`}
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-lg font-black text-[#102A43]">
+                      {shippingProgressPercentage}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Chart 2: Inventory Availability */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex items-center justify-between">
+                <div>
+                  <h3 className="font-black text-[#102A43] mb-1">
+                    القطع الجاهزة للشحن
+                  </h3>
+                  <p className="text-xs text-slate-500 font-bold">
+                    نسبة التوفر في المخزن
+                  </p>
+                  <div className="mt-4 font-black text-2xl text-blue-600">
+                    {formatNumber(inventorySummary.available)}{" "}
+                    <span className="text-sm font-medium text-slate-400">
+                      قطعة متاحة
+                    </span>
+                  </div>
+                </div>
+                <div className="relative w-24 h-24 flex items-center justify-center">
+                  <svg
+                    className="w-full h-full transform -rotate-90"
+                    viewBox="0 0 36 36"
+                  >
+                    <path
+                      className="text-slate-100"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="text-blue-600"
+                      strokeDasharray={`${inventoryProgressPercentage}, 100`}
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-lg font-black text-[#102A43]">
+                      {inventoryProgressPercentage}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Customer Service Support */}
+              <div className="bg-gradient-to-br from-[#0D2748] to-[#1a3d6d] rounded-3xl p-6 shadow-md text-white flex flex-col justify-between relative overflow-hidden">
+                <div className="absolute -left-4 -bottom-4 opacity-10">
+                  <Headset size={100} />
+                </div>
+                <div className="relative z-10 flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center shrink-0 border border-white/30 backdrop-blur-sm">
+                    <Headset size={24} className="text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-lg">
+                      تواصل مع خدمة العملاء
+                    </h3>
+                    <p className="text-xs text-blue-200 mt-1 leading-relaxed">
+                      نحن هنا لمساعدتك في أي استفسار يخص إنتاج وشحن الكولكشن
+                      الخاص بك.
+                    </p>
+                  </div>
+                </div>
+
+                <a
+                  href="https://wa.me/201115480308"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative z-10 mt-5 w-full bg-[#25D366] hover:bg-[#1ebd5a] text-white py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-sm hover:shadow-md"
+                >
+                  <MessageCircle size={18} />
+                  تواصل الآن عبر الواتساب
+                </a>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.9fr] gap-5">
               {/* Inventory */}
 
