@@ -395,71 +395,9 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
   };
 
   // ============================================================
-  // الحصول على كمية أمر التشغيل لموديل + مقاس
-  //
-  // لو عندنا Variant واحد:
-  //
-  // Model 1 / S = 40
-  //
-  // لو عندنا أكثر من Variant:
-  //
-  // Variant 1 / S = 40
-  // Variant 2 / S = 40
-  //
-  // بنستخدم أقل كمية متاحة بينهم كسريهات يمكن شحنها
-  // علشان ما نشحنش Variant أكثر من الموجود في أمر التشغيل.
-  // ============================================================
-
-  const getOrderSeriesForModelSize = (modelId, sizeName) => {
-    const items = getProductionItemsForModel(modelId);
-
-    if (items.length === 0) {
-      return 0;
-    }
-
-    const quantities = [];
-
-    items.forEach((item) => {
-      const sizeRow = item.sizeRows.find((row) => row.size_name === sizeName);
-
-      if (sizeRow) {
-        quantities.push(Number(sizeRow.quantity || 0));
-      }
-    });
-
-    if (quantities.length === 0) {
-      return 0;
-    }
-
-    return Math.min(...quantities);
-  };
-
-  // ============================================================
   // إجمالي السريهات المتاحة
-  //
-  // مهم جدًا:
-  //
-  // مش:
-  // models × sizes
-  //
-  // لكن بنجيب عدد السريهات من أمر التشغيل نفسه.
-  //
-  // مثال:
-  //
-  // Model 1:
-  // S = 40
-  // M = 40
-  // ...
-  //
-  // Model 2:
-  // S = 40
-  //
-  // Model 3:
-  // S = 40
-  //
-  // النتيجة = 40 سري.
-  //
-  // بنأخذ MIN بين كل model/size.
+  // بنحسبها بناءً على أقل كمية موجودة في المخزن (Inventory)
+  // للموديلات والمقاسات المختارة
   // ============================================================
 
   const totalSeries = useMemo(() => {
@@ -489,8 +427,6 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
   // ============================================================
   // عدد القطع في السري الواحد
-  //
-  // 3 موديلات × 5 مقاسات = 15 قطعة
   // ============================================================
 
   const piecesPerSeries = useMemo(() => {
@@ -617,13 +553,9 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
       return false;
     }
 
-    if (totalSeries <= 0) {
-      toast.error("لا توجد سريهات متاحة في أمر التشغيل.");
-      return false;
-    }
-
-    if (requestedSeries <= 0) {
-      toast.error("يرجى إدخال عدد السريهات المراد شحنها.");
+    // 💡 التعديل هنا: منع الشحن فقط لو المستخدم مشحنش لا سريهات ولا مكسر
+    if (requestedSeries <= 0 && brokenQty <= 0) {
+      toast.error("يرجى إدخال عدد السريهات أو المكسر المراد شحنها.");
       return false;
     }
 
@@ -835,11 +767,14 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
 
       // ========================================================
       // 6. خصم السريهات من الـ Inventory
+      // 💡 التعديل هنا: مش بنلف إلا لو requestedSeries أكبر من 0
       // ========================================================
 
-      for (const model of selectedModels) {
-        for (const size of commonSizes) {
-          await allocateInventory(model.id, size.name, requestedSeries);
+      if (requestedSeries > 0) {
+        for (const model of selectedModels) {
+          for (const size of commonSizes) {
+            await allocateInventory(model.id, size.name, requestedSeries);
+          }
         }
       }
 
@@ -897,174 +832,6 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
         if (brokenError) {
           throw brokenError;
         }
-      }
-
-      // ========================================================
-      // 10. تحديث أمر التشغيل
-      //
-      // هنا كان الجزء الناقص
-      //
-      // مثال:
-      //
-      // قبل الشحن:
-      // S = 40
-      // M = 40
-      // L = 40
-      //
-      // شحن 5:
-      // S = 35
-      // M = 35
-      // L = 35
-      //
-      // وبالتالي الـ series المتاحة تصبح 35
-      // ========================================================
-
-      for (const model of selectedModels) {
-        const modelItems = productionOrderItems.filter(
-          (item) => item.model_id === model.id,
-        );
-
-        for (const item of modelItems) {
-          // ----------------------------------------------------
-          // المقاسات الموجودة فعليًا في الـ item
-          // والتي تدخل ضمن الشحنة
-          // ----------------------------------------------------
-
-          const itemSizeRowsToUpdate = item.sizeRows.filter((sizeRow) =>
-            commonSizes.some((size) => size.name === sizeRow.size_name),
-          );
-
-          if (itemSizeRowsToUpdate.length === 0) {
-            continue;
-          }
-
-          // ----------------------------------------------------
-          // تحديث production_order_item_sizes
-          // ----------------------------------------------------
-
-          let itemShippedQuantity = 0;
-
-          for (const sizeRow of itemSizeRowsToUpdate) {
-            const currentQuantity = Number(sizeRow.quantity || 0);
-
-            const newQuantity = Math.max(0, currentQuantity - requestedSeries);
-
-            itemShippedQuantity += Math.min(currentQuantity, requestedSeries);
-
-            const { error: updateSizeError } = await supabase
-              .from("production_order_item_sizes")
-              .update({
-                quantity: newQuantity,
-              })
-              .eq("production_order_item_id", item.id)
-              .eq("size_id", sizeRow.size_id);
-
-            if (updateSizeError) {
-              throw updateSizeError;
-            }
-          }
-
-          // ----------------------------------------------------
-          // تحديث production_order_items.total_quantity
-          // ----------------------------------------------------
-
-          const currentItemTotal = Number(item.total_quantity || 0);
-
-          const newItemTotal = Math.max(
-            0,
-            currentItemTotal - itemShippedQuantity,
-          );
-
-          const { error: updateItemError } = await supabase
-            .from("production_order_items")
-            .update({
-              total_quantity: newItemTotal,
-            })
-            .eq("id", item.id);
-
-          if (updateItemError) {
-            throw updateItemError;
-          }
-        }
-      }
-
-      // ========================================================
-      // 11. تحديث إجمالي أمر التشغيل
-      //
-      // لا نحسبه من selectedModels.length فقط.
-      //
-      // عدد القطع التي خرجت من أمر التشغيل فعليًا هو:
-      //
-      // requestedSeries × عدد الموديلات × عدد المقاسات
-      //
-      // ========================================================
-
-      const productionOrderShippedQty = seriesPieces;
-
-      const currentProductionOrderQty = Number(
-        productionOrder.total_quantity || 0,
-      );
-
-      const newProductionOrderQty = Math.max(
-        0,
-        currentProductionOrderQty - productionOrderShippedQty,
-      );
-
-      // ========================================================
-      // 12. تحديث إجمالي مبلغ أمر التشغيل
-      //
-      // قيمة القطع المشحونة من كل Production Order Item
-      // ========================================================
-
-      let shippedAmount = 0;
-
-      for (const model of selectedModels) {
-        const modelItems = productionOrderItems.filter(
-          (item) => item.model_id === model.id,
-        );
-
-        for (const item of modelItems) {
-          const itemSizeCount = item.sizeRows.filter((sizeRow) =>
-            commonSizes.some((size) => size.name === sizeRow.size_name),
-          ).length;
-
-          const itemShippedQty = requestedSeries * itemSizeCount;
-
-          shippedAmount += itemShippedQty * Number(item.selling_price || 0);
-        }
-      }
-
-      const currentProductionOrderAmount = Number(
-        productionOrder.total_amount || 0,
-      );
-
-      const newProductionOrderAmount = Math.max(
-        0,
-        currentProductionOrderAmount - shippedAmount,
-      );
-
-      // ========================================================
-      // 13. تحديد حالة أمر التشغيل
-      //
-      // لو مفيش قطع متبقية -> completed
-      // غير كده يفضل pending
-      // ========================================================
-
-      const newProductionOrderStatus =
-        newProductionOrderQty <= 0 ? "completed" : "pending";
-
-      const { error: updateProductionOrderError } = await supabase
-        .from("production_orders")
-        .update({
-          total_quantity: newProductionOrderQty,
-          total_amount: newProductionOrderAmount,
-          status: newProductionOrderStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", productionOrder.id);
-
-      if (updateProductionOrderError) {
-        throw updateProductionOrderError;
       }
 
       // ========================================================
@@ -1402,8 +1169,6 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                               </div>
 
                               {/* السريهات الحقيقية */}
-
-                              {/* السريهات الحقيقية */}
                               <div className="rounded-xl bg-[#1a365d] p-4 text-center text-white">
                                 <p className="text-xs text-blue-100">
                                   السريهات المتاحة
@@ -1413,7 +1178,6 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                                   {totalSeries}
                                 </p>
 
-                                {/* 💡 التعديل هنا: اتغيرت الكلمة للمخزن */}
                                 <p className="mt-1 text-[10px] text-blue-100">
                                   جاهزة في المخزن
                                 </p>
@@ -1444,20 +1208,19 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                               <div className="grid gap-4 md:grid-cols-3">
                                 <div>
                                   <label className="mb-2 block text-xs font-bold text-slate-600">
-                                    عدد السريهات المراد شحنها *
+                                    عدد السريهات المراد شحنها (اختياري)
                                   </label>
 
+                                  {/* 💡 التعديل هنا: شلنا الـ required من الخانة دي */}
                                   <input
                                     type="number"
-                                    min="1"
+                                    min="0"
                                     max={totalSeries}
                                     value={seriesToShip}
                                     onChange={(e) => {
                                       setSeriesToShip(e.target.value);
-
-                                      setBrokenItems([]);
                                     }}
-                                    placeholder={`من 1 إلى ${totalSeries}`}
+                                    placeholder={`من 0 إلى ${totalSeries}`}
                                     className="w-full rounded-xl border border-slate-300 px-4 py-3 text-lg font-black outline-none focus:border-[#1a365d]"
                                   />
                                 </div>
@@ -1659,53 +1422,55 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                   ملخص الشحنة
               ================================================== */}
 
-              {selectedModels.length > 0 && requestedSeries > 0 && (
-                <div className="md:col-span-2">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                    <h3 className="mb-4 font-bold text-[#1a365d]">
-                      ملخص الشحنة
-                    </h3>
+              {/* 💡 التعديل هنا: إظهار الملخص لو في سريهات "أو" في مكسر */}
+              {selectedModels.length > 0 &&
+                (requestedSeries > 0 || brokenQty > 0) && (
+                  <div className="md:col-span-2">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                      <h3 className="mb-4 font-bold text-[#1a365d]">
+                        ملخص الشحنة
+                      </h3>
 
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                      <div className="rounded-xl bg-white p-4">
-                        <p className="text-xs text-slate-500">
-                          السريهات المشحونة
-                        </p>
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="rounded-xl bg-white p-4">
+                          <p className="text-xs text-slate-500">
+                            السريهات المشحونة
+                          </p>
 
-                        <p className="mt-1 text-2xl font-black text-[#1a365d]">
-                          {requestedSeries}
-                        </p>
-                      </div>
+                          <p className="mt-1 text-2xl font-black text-[#1a365d]">
+                            {requestedSeries}
+                          </p>
+                        </div>
 
-                      <div className="rounded-xl bg-white p-4">
-                        <p className="text-xs text-slate-500">
-                          القطع من السريهات
-                        </p>
+                        <div className="rounded-xl bg-white p-4">
+                          <p className="text-xs text-slate-500">
+                            القطع من السريهات
+                          </p>
 
-                        <p className="mt-1 text-2xl font-black text-[#1a365d]">
-                          {seriesPieces}
-                        </p>
-                      </div>
+                          <p className="mt-1 text-2xl font-black text-[#1a365d]">
+                            {seriesPieces}
+                          </p>
+                        </div>
 
-                      <div className="rounded-xl bg-white p-4">
-                        <p className="text-xs text-slate-500">المكسر</p>
+                        <div className="rounded-xl bg-white p-4">
+                          <p className="text-xs text-slate-500">المكسر</p>
 
-                        <p className="mt-1 text-2xl font-black text-red-700">
-                          {brokenQty}
-                        </p>
-                      </div>
+                          <p className="mt-1 text-2xl font-black text-red-700">
+                            {brokenQty}
+                          </p>
+                        </div>
 
-                      <div className="rounded-xl bg-[#1a365d] p-4 text-white">
-                        <p className="text-xs text-blue-100">إجمالي القطع</p>
+                        <div className="rounded-xl bg-[#1a365d] p-4 text-white">
+                          <p className="text-xs text-blue-100">إجمالي القطع</p>
 
-                        <p className="mt-1 text-2xl font-black">
-                          {combinedQty}
-                        </p>
+                          <p className="mt-1 text-2xl font-black">
+                            {combinedQty}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {/* ==================================================
                   شركة الشحن
@@ -1779,6 +1544,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
               إلغاء
             </button>
 
+            {/* 💡 التعديل هنا: الزرار يقفل فقط لو المستخدم معندوش لا سريهات ولا مكسر */}
             <button
               type="submit"
               disabled={
@@ -1786,7 +1552,7 @@ const AddNewShipment = ({ setOpenModal, onSuccess }) => {
                 !selectedCollectionId ||
                 !productionOrder ||
                 selectedModels.length === 0 ||
-                requestedSeries <= 0
+                (requestedSeries <= 0 && brokenQty <= 0)
               }
               className="rounded-xl bg-red-800 px-8 py-3 font-bold text-white shadow-sm transition hover:bg-red-900 disabled:cursor-not-allowed disabled:opacity-50"
             >

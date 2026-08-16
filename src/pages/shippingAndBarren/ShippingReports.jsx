@@ -109,12 +109,13 @@ export default function ShippingReports() {
       const webhookUrl =
         "https://n8n.youssef.im/webhook/69a361f3-f1e9-46bb-ad8f-8e43f2c29be9";
 
+      // 💡 التعديل هنا: إضافة توقيت بداية ونهاية اليوم للتواريخ
       const payload = {
         report_type: reportType,
         brand_id: selectedBrand || null,
         collection_id: selectedCollection || null,
-        date_from: isDateNeeded ? dateFrom : null,
-        date_to: isDateNeeded ? dateTo : null,
+        date_from: isDateNeeded && dateFrom ? `${dateFrom} 00:00:00` : null,
+        date_to: isDateNeeded && dateTo ? `${dateTo} 23:59:59` : null,
       };
 
       // 1. إرسال الطلب لـ n8n
@@ -128,13 +129,11 @@ export default function ShippingReports() {
       if (!response.ok) {
         let errorMessage = "حدث خطأ أثناء توليد التقرير.";
         try {
-          // قراءة الـ JSON اللي إنت عملته في الـ Respond to Webhook
           const errorData = await response.json();
           errorMessage = errorData.error || errorMessage;
         } catch (e) {
           console.log("No JSON error returned");
         }
-        // إيقاف التنفيذ ورمي الخطأ للـ catch
         throw new Error(errorMessage);
       }
 
@@ -143,12 +142,10 @@ export default function ShippingReports() {
       fetchRecentReports(); // تحديث القائمة بالتقرير الجديد
     } catch (error) {
       console.error("Error generating report:", error);
-      // عرض رسالة الخطأ اللي جات من n8n للمستخدم
       toast.error(
         error.message || "حدث خطأ، لا توجد بيانات كافية لتوليد التقرير.",
       );
     } finally {
-      // قفل علامة التحميل في كل الأحوال (سواء نجح أو فشل)
       setIsLoading(false);
     }
   };
