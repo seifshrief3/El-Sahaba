@@ -1092,13 +1092,16 @@ const ClientDashboard = () => {
 
       {/* ===================== DESKTOP SIDEBAR ===================== */}
       <aside className="w-64 bg-[#0f172a] text-white flex flex-col hidden lg:flex shrink-0">
-        <div className="p-6 border-b border-slate-800 flex flex-col items-center justify-center">
-          <div className="text-2xl font-black text-red-500 mb-1 flex items-center gap-2">
-            <Shirt size={28} />
-            الصحابة
-          </div>
+        <div className="p-5 border-b border-slate-800 flex flex-col items-center justify-center">
+          <img
+            src={logo}
+            alt="الصحابة لتصنيع وتصدير الملابس"
+            className="w-36 h-auto object-contain"
+          />
 
-          <p className="text-[10px] text-slate-400">لتصنيع وتصدير الملابس</p>
+          <p className="text-[10px] text-slate-400 mt-2">
+            لتصنيع وتصدير الملابس
+          </p>
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4">
