@@ -640,8 +640,9 @@ function App() {
         />
       </Route>
 
-      <Route path="/client-portal/*" element={<ClientDashboard />} />
-
+      <Route element={<ProtectedRoute allowedRoles={["client"]} />}>
+        <Route path="/client-portal/*" element={<ClientDashboard />} />
+      </Route>
       {/* =========================
           404
       ========================= */}

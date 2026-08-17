@@ -53,8 +53,28 @@ export const getStatusStyle = (status) => {
 };
 
 export const getCollectionProgress = (collection) => {
-  const total = Number(collection?.totalQuantity) || 0;
-  const shipped = Number(collection?.shippedQuantity) || 0;
-  if (total <= 0) return 0;
-  return Math.min(100, Math.round((shipped / total) * 100));
+  const stages = Array.isArray(collection?.productionStages)
+    ? collection.productionStages
+    : [];
+
+  const tracking = Array.isArray(collection?.orderTracking)
+    ? collection.orderTracking
+    : [];
+
+  if (stages.length === 0) {
+    return 0;
+  }
+
+  const completedStages = stages.filter((stage) => {
+    const trackingRow = tracking.find(
+      (item) => item.stage_id === stage.id
+    );
+
+    return trackingRow?.status === "completed";
+  }).length;
+
+  return Math.min(
+    100,
+    Math.round((completedStages / stages.length) * 100)
+  );
 };

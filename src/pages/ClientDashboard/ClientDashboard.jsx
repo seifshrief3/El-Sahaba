@@ -27,6 +27,13 @@ const ClientDashboard = ({ clientId }) => {
   const [productionOrders, setProductionOrders] = useState([]);
   const [productionOrderItems, setProductionOrderItems] = useState([]);
 
+  // =========================================================
+  // PRODUCTION TRACKING
+  // =========================================================
+
+  const [productionStages, setProductionStages] = useState([]);
+  const [orderTracking, setOrderTracking] = useState([]);
+
   const [inventory, setInventory] = useState([]);
   const [shipments, setShipments] = useState([]);
 
@@ -197,7 +204,9 @@ const ClientDashboard = ({ clientId }) => {
         .from("collections")
         .select("*")
         .eq("brand_id", brandId)
-        .order("created_at", { ascending: false });
+        .order("created_at", {
+          ascending: false,
+        });
 
       if (collectionsError) {
         console.error("Collections Error:", collectionsError);
@@ -292,6 +301,85 @@ const ClientDashboard = ({ clientId }) => {
       setProductionOrders(ordersData);
 
       const orderIds = ordersData.map((order) => order.id);
+
+      // =======================================================
+      // PRODUCTION STAGES
+      // =======================================================
+      //
+      // جدول production_stages يحتوي على مراحل الإنتاج
+      // وهي مراحل عامة تخص النظام.
+      //
+      // نستخدم select("*") حتى لا نفترض أسماء الأعمدة.
+      //
+      // =======================================================
+
+      let productionStagesData = [];
+
+      const { data: stagesData, error: stagesError } = await supabase
+        .from("production_stages")
+        .select("*");
+
+      if (stagesError) {
+        console.error("Production Stages Error:", stagesError);
+      } else {
+        productionStagesData = stagesData || [];
+      }
+
+      // ترتيب المراحل لو كان جدولك يحتوي على أي من
+      // الأعمدة الشائعة للترتيب.
+      productionStagesData.sort((a, b) => {
+        const orderA = Number(
+          a.stage_order ??
+            a.order_index ??
+            a.sort_order ??
+            a.position ??
+            a.sequence ??
+            9999,
+        );
+
+        const orderB = Number(
+          b.stage_order ??
+            b.order_index ??
+            b.sort_order ??
+            b.position ??
+            b.sequence ??
+            9999,
+        );
+
+        return orderA - orderB;
+      });
+
+      setProductionStages(productionStagesData);
+
+      // =======================================================
+      // ORDER TRACKING
+      // =======================================================
+      //
+      // كل Tracking مرتبط بأمر إنتاج.
+      //
+      // نفترض أن عمود الربط هو:
+      // production_order_id
+      //
+      // ونستخدم select("*") حتى نأخذ كل بيانات التتبع.
+      //
+      // =======================================================
+
+      let orderTrackingData = [];
+
+      if (orderIds.length > 0) {
+        const { data: trackingData, error: trackingError } = await supabase
+          .from("order_tracking")
+          .select("*")
+          .in("production_order_id", orderIds);
+
+        if (trackingError) {
+          console.error("Order Tracking Error:", trackingError);
+        } else {
+          orderTrackingData = trackingData || [];
+        }
+      }
+
+      setOrderTracking(orderTrackingData);
 
       // =======================================================
       // Models
@@ -545,25 +633,35 @@ const ClientDashboard = ({ clientId }) => {
 
   const enrichedCollections = useMemo(() => {
     return collections.map((collection) => {
-      // -------------------------------------------------------
+      // -----------------------------------------------------
       // Order
-      // -------------------------------------------------------
+      // -----------------------------------------------------
 
       const order = productionOrders.find(
         (item) => item.collection_id === collection.id,
       );
 
-      // -------------------------------------------------------
+      // -----------------------------------------------------
+      // Order Tracking
+      // -----------------------------------------------------
+
+      const collectionOrderTracking = order
+        ? orderTracking.filter(
+            (tracking) => tracking.production_order_id === order.id,
+          )
+        : [];
+
+      // -----------------------------------------------------
       // Models
-      // -------------------------------------------------------
+      // -----------------------------------------------------
 
       const collectionModels = models.filter(
         (model) => model.collection_id === collection.id,
       );
 
-      // -------------------------------------------------------
+      // -----------------------------------------------------
       // Order Items
-      // -------------------------------------------------------
+      // -----------------------------------------------------
 
       const orderItems = productionOrderItems.filter(
         (item) => item.production_order_id === order?.id,
@@ -571,23 +669,23 @@ const ClientDashboard = ({ clientId }) => {
 
       const totalQuantity = Number(order?.total_quantity) || 0;
 
-      // -------------------------------------------------------
+      // -----------------------------------------------------
       // Model IDs
-      // -------------------------------------------------------
+      // -----------------------------------------------------
 
       const collectionModelIds = collectionModels.map((model) => model.id);
 
-      // -------------------------------------------------------
+      // -----------------------------------------------------
       // Inventory
-      // -------------------------------------------------------
+      // -----------------------------------------------------
 
       const collectionInventory = inventory.filter((item) =>
         collectionModelIds.includes(item.model_id),
       );
 
-      // -------------------------------------------------------
+      // -----------------------------------------------------
       // Tech Packs
-      // -------------------------------------------------------
+      // -----------------------------------------------------
 
       const collectionTechPacks = techPacks.filter((techPack) =>
         collectionModelIds.includes(techPack.model_id),
@@ -607,9 +705,9 @@ const ClientDashboard = ({ clientId }) => {
         }
       });
 
-      // -------------------------------------------------------
+      // -----------------------------------------------------
       // Quotation
-      // -------------------------------------------------------
+      // -----------------------------------------------------
 
       const collectionQuotations = quotations.filter(
         (quotation) => quotation.collection_id === collection.id,
@@ -617,9 +715,9 @@ const ClientDashboard = ({ clientId }) => {
 
       const quotation = collectionQuotations[0] || null;
 
-      // -------------------------------------------------------
+      // -----------------------------------------------------
       // Inventory Calculations
-      // -------------------------------------------------------
+      // -----------------------------------------------------
 
       const availableQuantity = collectionInventory.reduce(
         (sum, item) => sum + (Number(item.available_qty) || 0),
@@ -641,9 +739,9 @@ const ClientDashboard = ({ clientId }) => {
         0,
       );
 
-      // -------------------------------------------------------
+      // -----------------------------------------------------
       // Return
-      // -------------------------------------------------------
+      // -----------------------------------------------------
 
       return {
         ...collection,
@@ -667,6 +765,11 @@ const ClientDashboard = ({ clientId }) => {
         techPacks: latestTechPacksByModel,
 
         quotation,
+
+        // Production Tracking
+        orderTracking: collectionOrderTracking,
+
+        productionStages,
       };
     });
   }, [
@@ -677,6 +780,8 @@ const ClientDashboard = ({ clientId }) => {
     inventory,
     techPacks,
     quotations,
+    orderTracking,
+    productionStages,
   ]);
 
   // =========================================================
@@ -730,6 +835,8 @@ const ClientDashboard = ({ clientId }) => {
       grouped[modelId].shipped += Number(item.shipped_qty) || 0;
 
       grouped[modelId].reserved += Number(item.reserved_qty) || 0;
+
+      grouped[modelId].received += Number(item.received_qty) || 0;
 
       const sizeName = item.size || "غير محدد";
 
@@ -855,6 +962,13 @@ const ClientDashboard = ({ clientId }) => {
             }
             enrichedCollections={enrichedCollections}
             inventory={inventory}
+            // =================================================
+            // PRODUCTION TRACKING
+            // =================================================
+
+            productionStages={productionStages}
+            orderTracking={orderTracking}
+            productionOrders={productionOrders}
             setActivePage={setActivePage}
             setSelectedShipment={setSelectedShipment}
           />

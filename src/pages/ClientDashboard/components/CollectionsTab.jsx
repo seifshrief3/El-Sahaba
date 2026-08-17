@@ -32,7 +32,6 @@ const CollectionsTab = ({
   // =========================================================
 
   const getModelQuantity = (collection, model) => {
-    // لو collection فيها orderItems
     const orderItems = Array.isArray(collection?.orderItems)
       ? collection.orderItems
       : [];
@@ -57,8 +56,114 @@ const CollectionsTab = ({
       );
     }
 
-    // fallback
     return safeNumber(model?.quantity || model?.total_quantity);
+  };
+
+  // =========================================================
+  // Get next stage
+  // =========================================================
+
+  const getNextStage = (collection) => {
+    /*
+      لو عندك المرحلة التالية محفوظة بالفعل في الداتا بيز
+      هيتم استخدامها مباشرة.
+    */
+
+    const directStage =
+      collection?.nextStage ||
+      collection?.next_stage ||
+      collection?.nextPhase ||
+      collection?.next_phase;
+
+    if (directStage) {
+      return directStage;
+    }
+
+    /*
+      لو المرحلة الحالية محفوظة في الداتا
+      نحاول استخدامها.
+    */
+
+    const currentStage =
+      collection?.currentStage ||
+      collection?.current_stage ||
+      collection?.currentPhase ||
+      collection?.current_phase;
+
+    if (currentStage) {
+      const stages = [
+        "التخطيط",
+        "الخامات",
+        "العينة",
+        "القص",
+        "الطباعة",
+        "التطريز",
+        "الخياطة",
+        "الجودة",
+        "التشطيب",
+        "الشحن",
+      ];
+
+      const currentIndex = stages.findIndex((stage) => stage === currentStage);
+
+      if (currentIndex !== -1 && currentIndex < stages.length - 1) {
+        return stages[currentIndex + 1];
+      }
+
+      if (currentIndex === stages.length - 1) {
+        return "مكتمل";
+      }
+    }
+
+    /*
+      Fallback:
+      لو مفيش currentStage أو nextStage
+      نحسب المرحلة من نسبة الإنجاز.
+    */
+
+    const progress = Number(getCollectionProgress(collection)) || 0;
+
+    if (progress >= 100) {
+      return "مكتمل";
+    }
+
+    if (progress < 10) {
+      return "التخطيط";
+    }
+
+    if (progress < 20) {
+      return "الخامات";
+    }
+
+    if (progress < 30) {
+      return "العينة";
+    }
+
+    if (progress < 40) {
+      return "القص";
+    }
+
+    if (progress < 50) {
+      return "الطباعة";
+    }
+
+    if (progress < 60) {
+      return "التطريز";
+    }
+
+    if (progress < 75) {
+      return "الخياطة";
+    }
+
+    if (progress < 85) {
+      return "الجودة";
+    }
+
+    if (progress < 95) {
+      return "التشطيب";
+    }
+
+    return "الشحن";
   };
 
   // =========================================================
@@ -113,6 +218,8 @@ const CollectionsTab = ({
           : [];
 
         const progress = getCollectionProgress(collection);
+
+        const nextStage = getNextStage(collection);
 
         const collectionQuantity = safeNumber(collection.totalQuantity);
 
@@ -202,6 +309,11 @@ const CollectionsTab = ({
 
                 <div class="progress-value">
                   ${progress}%
+                </div>
+
+                <div class="next-stage-print">
+                  المرحلة التالية:
+                  <strong>${nextStage}</strong>
                 </div>
               </div>
 
@@ -429,7 +541,7 @@ const CollectionsTab = ({
           }
 
           .progress-box {
-            min-width: 110px;
+            min-width: 150px;
             text-align: center;
             background: #eff6ff;
             border-radius: 12px;
@@ -446,6 +558,16 @@ const CollectionsTab = ({
             color: #0D2748;
             font-size: 21px;
             font-weight: 900;
+          }
+
+          .next-stage-print {
+            margin-top: 5px;
+            font-size: 10px;
+            color: #64748b;
+          }
+
+          .next-stage-print strong {
+            color: #0D2748;
           }
 
           /* =====================================================
@@ -729,9 +851,7 @@ const CollectionsTab = ({
           window.onload = function () {
 
             setTimeout(function () {
-
               window.print();
-
             }, 400);
 
           };
@@ -739,9 +859,7 @@ const CollectionsTab = ({
           window.onafterprint = function () {
 
             setTimeout(function () {
-
               window.close();
-
             }, 300);
 
           };
@@ -878,6 +996,8 @@ const CollectionsTab = ({
             {filteredCollections.map((collection) => {
               const progress = getCollectionProgress(collection);
 
+              const nextStage = getNextStage(collection);
+
               const firstModel = collection.models?.[0];
 
               return (
@@ -902,11 +1022,11 @@ const CollectionsTab = ({
 
                   <div
                     className="
-                    h-44
-                    bg-[#0D2748]
-                    relative
-                    overflow-hidden
-                  "
+                      h-44
+                      bg-[#0D2748]
+                      relative
+                      overflow-hidden
+                    "
                   >
                     {firstModel?.image_url ? (
                       <img
@@ -925,12 +1045,12 @@ const CollectionsTab = ({
                     ) : (
                       <div
                         className="
-                        w-full
-                        h-full
-                        flex
-                        items-center
-                        justify-center
-                      "
+                          w-full
+                          h-full
+                          flex
+                          items-center
+                          justify-center
+                        "
                       >
                         <Boxes size={60} className="text-white/20" />
                       </div>
@@ -938,61 +1058,70 @@ const CollectionsTab = ({
 
                     <div
                       className="
-                      absolute
-                      inset-0
-                      bg-gradient-to-t
-                      from-[#071A31]/90
-                      via-transparent
-                      to-transparent
-                    "
+                        absolute
+                        inset-0
+                        bg-gradient-to-t
+                        from-[#071A31]/90
+                        via-transparent
+                        to-transparent
+                      "
                     />
+
+                    {/* =================================================
+                        Collection name
+                    ================================================= */}
 
                     <div
                       className="
-                      absolute
-                      bottom-4
-                      right-4
-                      left-4
-                    "
+                        absolute
+                        bottom-4
+                        right-4
+                        left-4
+                      "
                     >
                       <div
                         className="
-                        text-white
-                        text-xl
-                        font-black
-                      "
+                          text-white
+                          text-xl
+                          font-black
+                        "
                       >
                         {collection.name}
                       </div>
 
                       <div
                         className="
-                        text-blue-100/80
-                        text-xs
-                        mt-1
-                      "
+                          text-blue-100/80
+                          text-xs
+                          mt-1
+                        "
                       >
                         {collection.models?.length || 0} موديل
                       </div>
                     </div>
 
+                    {/* =================================================
+                        Progress Badge
+                    ================================================= */}
+
                     <div
                       className="
-                      absolute
-                      top-3
-                      left-3
-                    "
+                        absolute
+                        top-3
+                        left-3
+                      "
                     >
                       <span
                         className="
-                        px-3
-                        py-1.5
-                        rounded-lg
-                        bg-white/95
-                        text-[#0D2748]
-                        text-[11px]
-                        font-black
-                      "
+                          px-3
+                          py-1.5
+                          rounded-lg
+                          bg-white/95
+                          text-[#0D2748]
+                          text-[11px]
+                          font-black
+                          shadow-sm
+                        "
                       >
                         {progress}% مكتمل
                       </span>
@@ -1004,176 +1133,248 @@ const CollectionsTab = ({
                   ================================================= */}
 
                   <div className="p-4">
-                    <div
-                      className="
-                      grid
-                      grid-cols-2
-                      gap-2
-                    "
-                    >
-                      <div
-                        className="
-                        rounded-xl
-                        bg-slate-50
-                        p-3
-                      "
-                      >
-                        <div
-                          className="
-                          text-[10px]
-                          text-slate-400
-                        "
-                        >
-                          إجمالي القطع
-                        </div>
-
-                        <div
-                          className="
-                          font-black
-                          text-lg
-                          mt-1
-                        "
-                        >
-                          {formatNumber(collection.totalQuantity)}
-                        </div>
-                      </div>
-
-                      <div
-                        className="
-                        rounded-xl
-                        bg-emerald-50
-                        p-3
-                      "
-                      >
-                        <div
-                          className="
-                          text-[10px]
-                          text-emerald-600
-                        "
-                        >
-                          تم الشحن
-                        </div>
-
-                        <div
-                          className="
-                          font-black
-                          text-lg
-                          text-emerald-700
-                          mt-1
-                        "
-                        >
-                          {formatNumber(collection.shippedQuantity)}
-                        </div>
-                      </div>
-
-                      <div
-                        className="
-                        rounded-xl
-                        bg-blue-50
-                        p-3
-                      "
-                      >
-                        <div
-                          className="
-                          text-[10px]
-                          text-blue-600
-                        "
-                        >
-                          بالمخزن
-                        </div>
-
-                        <div
-                          className="
-                          font-black
-                          text-lg
-                          text-blue-700
-                          mt-1
-                        "
-                        >
-                          {formatNumber(collection.availableQuantity)}
-                        </div>
-                      </div>
-
-                      <div
-                        className="
-                        rounded-xl
-                        bg-orange-50
-                        p-3
-                      "
-                      >
-                        <div
-                          className="
-                          text-[10px]
-                          text-orange-600
-                        "
-                        >
-                          محجوز
-                        </div>
-
-                        <div
-                          className="
-                          font-black
-                          text-lg
-                          text-orange-700
-                          mt-1
-                        "
-                        >
-                          {formatNumber(collection.reservedQuantity)}
-                        </div>
-                      </div>
-                    </div>
-
                     {/* =================================================
-                        Progress
+                        Progress + Next Stage
                     ================================================= */}
 
-                    <div className="mt-4">
+                    <div
+                      className="
+                        rounded-xl
+                        border
+                        border-slate-200
+                        bg-slate-50
+                        p-3.5
+                        mb-4
+                      "
+                    >
+                      {/* Progress Header */}
+
                       <div
                         className="
-                        flex
-                        items-center
-                        justify-between
-                        text-xs
-                        mb-2
-                      "
-                      >
-                        <span
-                          className="
-                          font-bold
-                          text-slate-500
+                          flex
+                          items-center
+                          justify-between
+                          gap-3
+                          mb-2
                         "
+                      >
+                        <div
+                          className="
+                            text-xs
+                            font-bold
+                            text-slate-500
+                          "
                         >
                           نسبة الإنجاز
-                        </span>
+                        </div>
 
-                        <span
+                        <div
                           className="
-                          font-black
-                          text-[#0D2748]
-                        "
+                            text-sm
+                            font-black
+                            text-[#0D2748]
+                          "
                         >
                           {progress}%
-                        </span>
+                        </div>
                       </div>
+
+                      {/* Progress Bar */}
 
                       <div
                         className="
-                        h-2.5
-                        rounded-full
-                        bg-slate-100
-                        overflow-hidden
-                      "
+                          h-2
+                          rounded-full
+                          bg-white
+                          border
+                          border-slate-200
+                          overflow-hidden
+                        "
                       >
                         <div
                           className="
                             h-full
                             bg-[#0D2748]
                             rounded-full
+                            transition-all
+                            duration-500
                           "
                           style={{
-                            width: `${progress}%`,
+                            width: `${Math.min(Math.max(progress, 0), 100)}%`,
                           }}
                         />
+                      </div>
+
+                      {/* Next Stage */}
+
+                      <div
+                        className="
+                          flex
+                          items-center
+                          justify-between
+                          gap-3
+                          mt-3
+                          pt-3
+                          border-t
+                          border-slate-200
+                        "
+                      >
+                        <span
+                          className="
+                            text-[11px]
+                            text-slate-400
+                            font-medium
+                          "
+                        >
+                          المرحلة التالية
+                        </span>
+
+                        <span
+                          className="
+                            text-xs
+                            font-black
+                            text-[#0D2748]
+                            bg-white
+                            border
+                            border-slate-200
+                            px-2.5
+                            py-1
+                            rounded-lg
+                          "
+                        >
+                          {nextStage}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* =================================================
+                        Statistics
+                    ================================================= */}
+
+                    <div
+                      className="
+                        grid
+                        grid-cols-2
+                        gap-2
+                      "
+                    >
+                      {/* Total */}
+
+                      <div
+                        className="
+                          rounded-xl
+                          bg-slate-50
+                          p-3
+                        "
+                      >
+                        <div
+                          className="
+                            text-[10px]
+                            text-slate-400
+                          "
+                        >
+                          إجمالي القطع
+                        </div>
+
+                        <div
+                          className="
+                            font-black
+                            text-lg
+                            mt-1
+                          "
+                        >
+                          {formatNumber(collection.totalQuantity)}
+                        </div>
+                      </div>
+
+                      {/* Shipped */}
+
+                      <div
+                        className="
+                          rounded-xl
+                          bg-emerald-50
+                          p-3
+                        "
+                      >
+                        <div
+                          className="
+                            text-[10px]
+                            text-emerald-600
+                          "
+                        >
+                          تم الشحن
+                        </div>
+
+                        <div
+                          className="
+                            font-black
+                            text-lg
+                            text-emerald-700
+                            mt-1
+                          "
+                        >
+                          {formatNumber(collection.shippedQuantity)}
+                        </div>
+                      </div>
+
+                      {/* Available */}
+
+                      <div
+                        className="
+                          rounded-xl
+                          bg-blue-50
+                          p-3
+                        "
+                      >
+                        <div
+                          className="
+                            text-[10px]
+                            text-blue-600
+                          "
+                        >
+                          بالمخزن
+                        </div>
+
+                        <div
+                          className="
+                            font-black
+                            text-lg
+                            text-blue-700
+                            mt-1
+                          "
+                        >
+                          {formatNumber(collection.availableQuantity)}
+                        </div>
+                      </div>
+
+                      {/* Reserved */}
+
+                      <div
+                        className="
+                          rounded-xl
+                          bg-orange-50
+                          p-3
+                        "
+                      >
+                        <div
+                          className="
+                            text-[10px]
+                            text-orange-600
+                          "
+                        >
+                          محجوز
+                        </div>
+
+                        <div
+                          className="
+                            font-black
+                            text-lg
+                            text-orange-700
+                            mt-1
+                          "
+                        >
+                          {formatNumber(collection.reservedQuantity)}
+                        </div>
                       </div>
                     </div>
 
