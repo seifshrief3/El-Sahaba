@@ -242,7 +242,6 @@ const Pricing = () => {
               <div className="space-y-4">
                 {collections
                   .filter((col) => col.is_priced)
-                  .slice(0, 3)
                   .map((col) => (
                     <div
                       key={col.id}
