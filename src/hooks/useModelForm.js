@@ -580,37 +580,12 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
       throw new Error("لم يتم اختيار ملف");
     }
 
-    console.log(
-      "========== CLOUDINARY UPLOAD =========="
-    );
-
-    console.log("Original file:", {
-      name: file.name,
-      type: file.type,
-      sizeMB: (
-        file.size /
-        1024 /
-        1024
-      ).toFixed(2),
-    });
-
-    // ضغط الصورة فقط إذا كانت أكبر من 8MB
     const compressedFile =
       await compressImage(file, {
         maxSizeMB: 8,
         maxWidthOrHeight: 3000,
         quality: 0.85,
       });
-
-    console.log("File after compression:", {
-      name: compressedFile.name,
-      type: compressedFile.type,
-      sizeMB: (
-        compressedFile.size /
-        1024 /
-        1024
-      ).toFixed(2),
-    });
 
     const formData = new FormData();
 
@@ -652,16 +627,6 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
     const responseText =
       await response.text();
 
-    console.log(
-      "Cloudinary status:",
-      response.status
-    );
-
-    console.log(
-      "Cloudinary response:",
-      responseText
-    );
-
     if (!response.ok) {
       let cloudinaryError =
         responseText;
@@ -697,11 +662,6 @@ export const useModelForm = (activeModel, onModelChange, brandName) => {
         "Cloudinary لم يرجع secure_url"
       );
     }
-
-    console.log(
-      "Cloudinary upload successful:",
-      data.secure_url
-    );
 
     return data.secure_url;
   };

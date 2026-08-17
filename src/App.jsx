@@ -63,8 +63,7 @@ import KnowledgeBase from "./pages/managments/KnowledgeBase";
 import Reports from "./pages/managments/Reports";
 import OrdersFollowup from "./pages/managments/OrdersFollowup";
 import Approvals from "./pages/managments/Approvals";
-
-import ClientDashboard from "./pages/ClientDashboard";
+import ClientDashboard from "./pages/ClientDashboard/ClientDashboard";
 
 function App() {
   return (
