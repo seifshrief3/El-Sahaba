@@ -50,9 +50,6 @@ const DashboardHome = ({
   setActivePage,
   setSelectedShipment,
 
-  // =========================================================
-  // Production Tracking
-  // =========================================================
   productionStages = [],
   orderTracking = [],
   productionOrders = [],
@@ -78,12 +75,20 @@ const DashboardHome = ({
 
   const shippingProgressPercentage =
     totalProductionQuantity > 0
-      ? Math.round((totalShipped / totalProductionQuantity) * 100)
+      ? Math.min(
+          100,
+          Math.round((totalShipped / totalProductionQuantity) * 100),
+        )
       : 0;
 
   const inventoryProgressPercentage =
     totalProductionQuantity > 0
-      ? Math.round((inventorySummary.available / totalProductionQuantity) * 100)
+      ? Math.min(
+          100,
+          Math.round(
+            (inventorySummary?.available / totalProductionQuantity) * 100,
+          ),
+        )
       : 0;
 
   // =========================================================
@@ -276,13 +281,8 @@ const DashboardHome = ({
       };
     }
 
-    // -------------------------------------------------------
-    // Find completed stages
-    // -------------------------------------------------------
-
     const completedStages = sortedProductionStages.filter((stage) => {
       const stageId = getStageId(stage);
-
       const stageTracking = getTrackingForStage(tracking, stageId);
 
       return isTrackingCompleted(stageTracking);
@@ -290,20 +290,14 @@ const DashboardHome = ({
 
     const completedCount = completedStages.length;
 
-    // -------------------------------------------------------
-    // Find FIRST explicitly active stage
-    // -------------------------------------------------------
-
     let activeStageIndex = -1;
 
     sortedProductionStages.forEach((stage, index) => {
-      // لو لقينا مرحلة جاري بالفعل، ما نغيرهاش
       if (activeStageIndex !== -1) {
         return;
       }
 
       const stageId = getStageId(stage);
-
       const stageTracking = getTrackingForStage(tracking, stageId);
 
       if (stageTracking && isTrackingInProgress(stageTracking)) {
@@ -311,32 +305,18 @@ const DashboardHome = ({
       }
     });
 
-    // -------------------------------------------------------
-    // If there is no active tracking record,
-    // current stage = first stage that is not completed
-    // -------------------------------------------------------
-
     if (activeStageIndex === -1) {
       activeStageIndex = sortedProductionStages.findIndex((stage) => {
         const stageId = getStageId(stage);
-
         const stageTracking = getTrackingForStage(tracking, stageId);
 
         return !isTrackingCompleted(stageTracking);
       });
     }
 
-    // -------------------------------------------------------
-    // All stages completed
-    // -------------------------------------------------------
-
     if (activeStageIndex === -1) {
       activeStageIndex = sortedProductionStages.length - 1;
     }
-
-    // -------------------------------------------------------
-    // Progress
-    // -------------------------------------------------------
 
     const progress = Math.round(
       (completedCount / sortedProductionStages.length) * 100,
@@ -402,15 +382,7 @@ const DashboardHome = ({
     return getOrderTracking(selectedOrder.id);
   }, [selectedOrder, orderTracking]);
 
-  // =========================================================
-  // Current Production Progress
-  // =========================================================
-
   const productionProgress = selectedOrder?.productionProgress || 0;
-
-  // =========================================================
-  // Current Order Number
-  // =========================================================
 
   const currentOrderNumber =
     selectedOrder?.order_number ||
@@ -419,10 +391,6 @@ const DashboardHome = ({
     selectedOrder?.code ||
     selectedOrder?.name ||
     "-";
-
-  // =========================================================
-  // Current Stage
-  // =========================================================
 
   const currentStageName = selectedOrder?.currentStage
     ? getStageName(selectedOrder.currentStage)
@@ -435,93 +403,70 @@ const DashboardHome = ({
   const getStageIcon = (stage, index) => {
     const name = String(getStageName(stage)).toLowerCase();
 
-    if (
-      name.includes("أمر") ||
-      name.includes("order") ||
-      name.includes("طلب")
-    ) {
+    if (name.includes("أمر") || name.includes("order") || name.includes("طلب"))
       return ClipboardList;
-    }
 
     if (
       name.includes("خامة") ||
       name.includes("fabric") ||
       name.includes("material")
-    ) {
+    )
       return Layers3;
-    }
 
-    if (name.includes("باترون") || name.includes("pattern")) {
-      return Ruler;
-    }
+    if (name.includes("باترون") || name.includes("pattern")) return Ruler;
 
-    if (name.includes("قص") || name.includes("cut")) {
-      return Scissors;
-    }
+    if (name.includes("قص") || name.includes("cut")) return Scissors;
 
-    if (name.includes("طباعة") || name.includes("print")) {
-      return Printer;
-    }
+    if (name.includes("طباعة") || name.includes("print")) return Printer;
 
-    if (name.includes("تطريز") || name.includes("embroidery")) {
-      return Sparkles;
-    }
+    if (name.includes("تطريز") || name.includes("embroidery")) return Sparkles;
 
     if (
       name.includes("تشغيل") ||
       name.includes("sewing") ||
       name.includes("خياطة")
-    ) {
+    )
       return Shirt;
-    }
 
     if (
       name.includes("جودة") ||
       name.includes("quality") ||
       name.includes("qc")
-    ) {
+    )
       return BadgeCheck;
-    }
 
-    if (name.includes("تشطيب") || name.includes("finishing")) {
-      return Wrench;
-    }
+    if (name.includes("تشطيب") || name.includes("finishing")) return Wrench;
 
     if (
       name.includes("تجهيز") ||
       name.includes("preparation") ||
       name.includes("prepare")
-    ) {
+    )
       return PackageCheck;
-    }
 
     if (
       name.includes("تعبئة") ||
       name.includes("packaging") ||
       name.includes("packing")
-    ) {
+    )
       return Package;
-    }
 
     if (
       name.includes("مخزن") ||
       name.includes("warehouse") ||
       name.includes("inventory")
-    ) {
+    )
       return Warehouse;
-    }
 
     if (
       name.includes("شحن") ||
       name.includes("shipping") ||
       name.includes("shipment")
-    ) {
+    )
       return Truck;
-    }
 
-    if (name.includes("فحص") || name.includes("inspection")) {
+    if (name.includes("فحص") || name.includes("inspection"))
       return ClipboardCheck;
-    }
 
     const fallbackIcons = [
       ClipboardList,
@@ -572,22 +517,12 @@ const DashboardHome = ({
       };
     }
 
-    // -------------------------------------------------------
-    // No tracking:
-    // If this is the selected current stage
-    // -------------------------------------------------------
-
     if (selectedOrder && index === selectedOrder.currentStageIndex) {
       return {
         type: "current",
         label: "قيد التنفيذ",
       };
     }
-
-    // -------------------------------------------------------
-    // If all previous stages are completed,
-    // this is the current stage
-    // -------------------------------------------------------
 
     const previousStages = sortedProductionStages.slice(0, index);
 
@@ -617,7 +552,7 @@ const DashboardHome = ({
   };
 
   // =========================================================
-  // INVENTORY SUMMARY
+  // Safe Data
   // =========================================================
 
   const inventorySummarySafe = inventorySummary || {
@@ -627,11 +562,71 @@ const DashboardHome = ({
     received: 0,
   };
 
+  const shipmentRowsSafe = shipmentRows || [];
+  const inventoryRowsSafe = inventoryRows || [];
+  const collectionsSafe = enrichedCollections || [];
+  const inventorySafe = inventory || [];
+
   // =========================================================
-  // SHIPMENT ROWS
+  // Stat Card Styles
   // =========================================================
 
-  const shipmentRowsSafe = shipmentRows || [];
+  const statCards = [
+    {
+      title: "إجمالي المستلم",
+      value: totalReceived,
+      subtitle: "الكمية المستلمة",
+      icon: CheckCircle2,
+      iconClass:
+        "bg-emerald-50 text-emerald-600 border-emerald-200 group-hover:bg-emerald-100",
+      delay: 0,
+    },
+    {
+      title: "إجمالي القطع الحالية",
+      value: totalProductionQuantity,
+      subtitle: "إجمالي أوامر التشغيل",
+      icon: Package,
+      iconClass:
+        "bg-blue-50 text-[#0D5FE8] border-blue-200 group-hover:bg-blue-100",
+      delay: 60,
+    },
+    {
+      title: "إجمالي المشحون",
+      value: totalShipped,
+      subtitle: "تم شحنها بالفعل",
+      icon: Truck,
+      iconClass:
+        "bg-orange-50 text-orange-600 border-orange-200 group-hover:bg-orange-100",
+      delay: 120,
+    },
+    {
+      title: "المتاح بالمخزن",
+      value: inventorySummarySafe.available,
+      subtitle: "جاهز للشحن",
+      icon: Boxes,
+      iconClass:
+        "bg-violet-50 text-violet-600 border-violet-200 group-hover:bg-violet-100",
+      delay: 180,
+    },
+    {
+      title: "القطع المحجوزة",
+      value: inventorySummarySafe.reserved,
+      subtitle: "كميات محجوزة",
+      icon: PackageCheck,
+      iconClass:
+        "bg-rose-50 text-rose-600 border-rose-200 group-hover:bg-rose-100",
+      delay: 240,
+    },
+    {
+      title: "عدد الشحنات",
+      value: shipmentCount,
+      subtitle: `${completedShipments} شحنة مكتملة`,
+      icon: Send,
+      iconClass:
+        "bg-cyan-50 text-cyan-600 border-cyan-200 group-hover:bg-cyan-100",
+      delay: 300,
+    },
+  ];
 
   // =========================================================
   // Render
@@ -639,181 +634,83 @@ const DashboardHome = ({
 
   return (
     <main
-      className="max-w-[1600px] mx-auto px-3 md:px-7 py-5 md:py-7 animate-fade-in"
+      className="max-w-[1600px] mx-auto px-3 md:px-7 py-5 md:py-7"
       dir="rtl"
     >
       <div className="space-y-5">
         {/* =====================================================
-            TOP CARDS
+            MAIN STATS
         ===================================================== */}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* Shipping Progress */}
+        <section className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm transition-shadow duration-500 hover:shadow-md">
+          <div className="pointer-events-none absolute -top-28 -left-20 h-64 w-64 rounded-full bg-blue-50/70 blur-3xl animate-[pulse_5s_ease-in-out_infinite]" />
 
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex items-center justify-between">
-            <div>
-              <h3 className="font-black text-[#102A43] mb-1">
-                نسبة إنجاز الشحن
-              </h3>
+          <div className="pointer-events-none absolute -bottom-24 right-1/3 h-48 w-48 rounded-full bg-indigo-50/50 blur-3xl" />
 
-              <p className="text-xs text-slate-500 font-bold">
-                من إجمالي أوامر التشغيل
-              </p>
+          <div className="relative z-10">
+            <SectionTitle
+              icon={BarChart3}
+              title="خلاصة المؤشرات الرئيسية"
+              subtitle="ملخص سريع لحالة الإنتاج والمخزون والشحن"
+            />
 
-              <div className="mt-4 font-black text-2xl text-emerald-600">
-                {formatNumber(totalShipped)}{" "}
-                <span className="text-sm font-medium text-slate-400">
-                  قطعة مشحونة
-                </span>
-              </div>
-            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5">
+              {statCards.map((card) => {
+                const Icon = card.icon;
 
-            <div className="relative w-24 h-24 flex items-center justify-center">
-              <svg
-                className="w-full h-full transform -rotate-90"
-                viewBox="0 0 36 36"
-              >
-                <path
-                  className="text-slate-100"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-
-                <path
-                  className="text-emerald-500"
-                  strokeDasharray={`${shippingProgressPercentage}, 100`}
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                />
-              </svg>
-
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-lg font-black text-[#102A43]">
-                  {shippingProgressPercentage}%
-                </span>
-              </div>
+                return (
+                  <div
+                    key={card.title}
+                    className="group"
+                    style={{
+                      animationDelay: `${card.delay}ms`,
+                    }}
+                  >
+                    <StatCard
+                      title={card.title}
+                      value={card.value}
+                      subtitle={card.subtitle}
+                      icon={Icon}
+                      iconClass={card.iconClass}
+                      delay={card.delay}
+                    />
+                  </div>
+                );
+              })}
             </div>
           </div>
-
-          {/* Inventory Availability */}
-
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex items-center justify-between">
-            <div>
-              <h3 className="font-black text-[#102A43] mb-1">
-                القطع الجاهزة للشحن
-              </h3>
-
-              <p className="text-xs text-slate-500 font-bold">
-                نسبة التوفر في المخزن
-              </p>
-
-              <div className="mt-4 font-black text-2xl text-blue-600">
-                {formatNumber(inventorySummarySafe.available)}{" "}
-                <span className="text-sm font-medium text-slate-400">
-                  قطعة متاحة
-                </span>
-              </div>
-            </div>
-
-            <div className="relative w-24 h-24 flex items-center justify-center">
-              <svg
-                className="w-full h-full transform -rotate-90"
-                viewBox="0 0 36 36"
-              >
-                <path
-                  className="text-slate-100"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-
-                <path
-                  className="text-blue-600"
-                  strokeDasharray={`${inventoryProgressPercentage}, 100`}
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                />
-              </svg>
-
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-lg font-black text-[#102A43]">
-                  {inventoryProgressPercentage}%
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Customer Service */}
-
-          <div className="bg-gradient-to-br from-[#0D2748] to-[#1a3d6d] rounded-3xl p-6 shadow-md text-white flex flex-col justify-between relative overflow-hidden">
-            <div className="absolute -left-4 -bottom-4 opacity-10">
-              <Headset size={100} />
-            </div>
-
-            <div className="relative z-10 flex items-start gap-4">
-              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center shrink-0 border border-white/30 backdrop-blur-sm">
-                <Headset size={24} className="text-white" />
-              </div>
-
-              <div>
-                <h3 className="font-black text-lg">تواصل مع خدمة العملاء</h3>
-
-                <p className="text-xs text-blue-200 mt-1 leading-relaxed">
-                  نحن هنا لمساعدتك في أي استفسار يخص إنتاج وشحن الكولكشن الخاص
-                  بك.
-                </p>
-              </div>
-            </div>
-
-            <a
-              href="https://wa.me/201115480308"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="relative z-10 mt-5 w-full bg-[#25D366] hover:bg-[#1ebd5a] text-white py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-sm hover:shadow-md"
-            >
-              <MessageCircle size={18} />
-              تواصل الآن عبر الواتساب
-            </a>
-          </div>
-        </div>
+        </section>
 
         {/* =====================================================
             PRODUCTION TRACKING
         ===================================================== */}
 
-        <section className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+        <section className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden transition-shadow duration-500 hover:shadow-md">
           {/* Header */}
 
-          <div className="p-5 md:p-6 border-b border-slate-100">
+          <div className="p-5 md:p-6 border-b border-slate-100 bg-gradient-to-l from-white to-slate-50/50">
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
               <div>
                 <div className="flex items-center gap-2">
-                  <ClipboardCheck size={21} className="text-[#0D2748]" />
+                  <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#0D2748] flex items-center justify-center">
+                    <ClipboardCheck size={19} />
+                  </div>
 
-                  <h2 className="text-lg md:text-xl font-black text-[#102A43]">
-                    مراحل التنفيذ
-                  </h2>
+                  <div>
+                    <h2 className="text-lg md:text-xl font-black text-[#102A43]">
+                      مراحل التنفيذ
+                    </h2>
+
+                    <p className="text-xs md:text-sm text-slate-400 font-bold mt-1">
+                      متابعة مراحل إنتاج الطلبات
+                    </p>
+                  </div>
                 </div>
-
-                <p className="text-xs md:text-sm text-slate-400 font-bold mt-1">
-                  متابعة مراحل إنتاج الطلبات
-                </p>
               </div>
 
-              {/* Selected Order Summary */}
-
               {selectedOrder && (
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="px-4 py-2 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm">
                     <div className="text-[10px] text-slate-400 font-bold">
                       رقم الأمر
                     </div>
@@ -823,7 +720,7 @@ const DashboardHome = ({
                     </div>
                   </div>
 
-                  <div className="px-4 py-2 rounded-xl bg-red-50 border border-red-100">
+                  <div className="px-4 py-2.5 rounded-xl bg-red-50 border border-red-100 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm">
                     <div className="text-[10px] text-red-400 font-bold">
                       المرحلة الحالية
                     </div>
@@ -833,7 +730,7 @@ const DashboardHome = ({
                     </div>
                   </div>
 
-                  <div className="px-4 py-2 rounded-xl bg-[#0D2748] text-white">
+                  <div className="px-4 py-2.5 rounded-xl bg-[#0D2748] text-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
                     <div className="text-[10px] text-blue-200 font-bold">
                       نسبة التنفيذ
                     </div>
@@ -847,14 +744,10 @@ const DashboardHome = ({
             </div>
           </div>
 
-          {/* ===================================================
-              Orders List + Timeline
-          =================================================== */}
+          {/* Orders + Timeline */}
 
           <div className="grid grid-cols-1 xl:grid-cols-[0.85fr_2fr] gap-0">
-            {/* =================================================
-                ORDERS LIST
-            ================================================= */}
+            {/* Orders */}
 
             <div className="border-b xl:border-b-0 xl:border-l border-slate-100 bg-slate-50/50">
               <div className="p-5 border-b border-slate-100">
@@ -867,7 +760,7 @@ const DashboardHome = ({
                     </p>
                   </div>
 
-                  <div className="w-9 h-9 rounded-xl bg-[#0D2748] text-white flex items-center justify-center">
+                  <div className="w-9 h-9 rounded-xl bg-[#0D2748] text-white flex items-center justify-center shadow-sm transition-transform duration-300 hover:scale-105">
                     <ClipboardList size={18} />
                   </div>
                 </div>
@@ -883,7 +776,7 @@ const DashboardHome = ({
                 </div>
               ) : (
                 <div className="p-3 space-y-2 max-h-[420px] overflow-y-auto">
-                  {orderProductionList.map((order) => {
+                  {orderProductionList.map((order, index) => {
                     const isSelected =
                       String(order.id) === String(selectedOrder?.id);
 
@@ -902,47 +795,35 @@ const DashboardHome = ({
                       <button
                         key={order.id}
                         type="button"
-                        onClick={() => {
-                          setSelectedOrderId(order.id);
-                        }}
+                        onClick={() => setSelectedOrderId(order.id)}
                         className={`
-                          w-full
-                          text-right
-                          rounded-2xl
-                          border
-                          p-4
-                          transition-all
+                          w-full text-right rounded-2xl border p-4
+                          transition-all duration-300
+                          hover:-translate-y-0.5
                           ${
                             isSelected
-                              ? "bg-[#0D2748] border-[#0D2748] text-white shadow-md"
-                              : "bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50/40"
+                              ? "bg-[#0D2748] border-[#0D2748] text-white shadow-lg shadow-[#0D2748]/15"
+                              : "bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-sm"
                           }
                         `}
+                        style={{
+                          animationDelay: `${index * 40}ms`,
+                        }}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div
-                              className={`
-                                text-sm
-                                font-black
-                                truncate
-                                ${isSelected ? "text-white" : "text-[#102A43]"}
-                              `}
+                              className={`text-sm font-black truncate ${
+                                isSelected ? "text-white" : "text-[#102A43]"
+                              }`}
                             >
                               {orderNumber}
                             </div>
 
                             <div
-                              className={`
-                                text-[10px]
-                                font-bold
-                                mt-1
-                                ${
-                                  isSelected
-                                    ? "text-blue-200"
-                                    : "text-slate-400"
-                                }
-                              `}
+                              className={`text-[10px] font-bold mt-1 ${
+                                isSelected ? "text-blue-200" : "text-slate-400"
+                              }`}
                             >
                               {order.total_quantity
                                 ? `${formatNumber(order.total_quantity)} قطعة`
@@ -951,19 +832,11 @@ const DashboardHome = ({
                           </div>
 
                           <div
-                            className={`
-                              shrink-0
-                              px-2.5
-                              py-1
-                              rounded-lg
-                              text-[10px]
-                              font-black
-                              ${
-                                isSelected
-                                  ? "bg-white/10 text-white"
-                                  : "bg-slate-100 text-slate-500"
-                              }
-                            `}
+                            className={`shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-black ${
+                              isSelected
+                                ? "bg-white/10 text-white"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
                           >
                             {order.productionProgress}%
                           </div>
@@ -972,57 +845,35 @@ const DashboardHome = ({
                         <div className="mt-3">
                           <div className="flex items-center justify-between gap-2 mb-1.5">
                             <span
-                              className={`
-                                text-[10px]
-                                font-black
-                                truncate
-                                ${
-                                  isSelected
-                                    ? "text-blue-100"
-                                    : "text-[#102A43]"
-                                }
-                              `}
+                              className={`text-[10px] font-black truncate ${
+                                isSelected ? "text-blue-100" : "text-[#102A43]"
+                              }`}
                             >
                               {stageName}
                             </span>
 
                             <span
-                              className={`
-                                text-[9px]
-                                font-bold
-                                shrink-0
-                                ${
-                                  isSelected
-                                    ? "text-blue-200"
-                                    : "text-slate-400"
-                                }
-                              `}
+                              className={`text-[9px] font-bold shrink-0 ${
+                                isSelected ? "text-blue-200" : "text-slate-400"
+                              }`}
                             >
                               المرحلة الحالية
                             </span>
                           </div>
 
                           <div
-                            className={`
-                              h-1.5
-                              rounded-full
-                              overflow-hidden
-                              ${isSelected ? "bg-white/15" : "bg-slate-100"}
-                            `}
+                            className={`h-1.5 rounded-full overflow-hidden ${
+                              isSelected ? "bg-white/15" : "bg-slate-100"
+                            }`}
                           >
                             <div
-                              className={`
-                                h-full
-                                rounded-full
-                                transition-all
-                                ${
-                                  order.productionProgress >= 100
-                                    ? "bg-emerald-500"
-                                    : isSelected
-                                      ? "bg-white"
-                                      : "bg-[#0D2748]"
-                                }
-                              `}
+                              className={`h-full rounded-full transition-all duration-700 ease-out ${
+                                order.productionProgress >= 100
+                                  ? "bg-emerald-500"
+                                  : isSelected
+                                    ? "bg-white"
+                                    : "bg-[#0D2748]"
+                              }`}
                               style={{
                                 width: `${Math.min(
                                   100,
@@ -1039,9 +890,7 @@ const DashboardHome = ({
               )}
             </div>
 
-            {/* =================================================
-                SELECTED ORDER TIMELINE
-            ================================================= */}
+            {/* Timeline */}
 
             <div className="min-w-0">
               {!selectedOrder ? (
@@ -1075,7 +924,7 @@ const DashboardHome = ({
 
                     <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
                       <div
-                        className="h-full rounded-full bg-[#0D2748] transition-all duration-500"
+                        className="h-full rounded-full bg-gradient-to-l from-[#0D2748] to-[#0D5FE8] transition-all duration-1000 ease-out"
                         style={{
                           width: `${Math.min(100, productionProgress)}%`,
                         }}
@@ -1086,10 +935,14 @@ const DashboardHome = ({
                   {/* Current Stage Banner */}
 
                   <div className="px-5 md:px-6 pt-4">
-                    <div className="rounded-2xl border border-red-100 bg-red-50/60 p-4 flex items-center justify-between gap-4">
+                    <div className="rounded-2xl border border-red-100 bg-gradient-to-l from-red-50/80 to-white p-4 flex items-center justify-between gap-4 transition-all duration-300 hover:shadow-sm">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-xl bg-red-100 text-[#C62828] flex items-center justify-center shrink-0">
-                          <RefreshCw size={18} />
+                        <div className="relative w-10 h-10 rounded-xl bg-red-100 text-[#C62828] flex items-center justify-center shrink-0">
+                          <span className="absolute inset-0 rounded-xl bg-red-200/50 animate-ping opacity-30" />
+                          <RefreshCw
+                            size={18}
+                            className="relative animate-[spin_4s_linear_infinite]"
+                          />
                         </div>
 
                         <div className="min-w-0">
@@ -1115,9 +968,7 @@ const DashboardHome = ({
                     </div>
                   </div>
 
-                  {/* =================================================
-                      Timeline
-                  ================================================= */}
+                  {/* Timeline */}
 
                   {sortedProductionStages.length === 0 ? (
                     <div className="p-8">
@@ -1138,9 +989,7 @@ const DashboardHome = ({
                         >
                           {sortedProductionStages.map((stage, index) => {
                             const stageId = getStageId(stage);
-
                             const state = getStageState(stage, index);
-
                             const Icon = getStageIcon(stage, index);
 
                             const tracking = getTrackingForStage(
@@ -1158,7 +1007,7 @@ const DashboardHome = ({
 
                             if (state.type === "completed") {
                               iconWrapperClass =
-                                "bg-emerald-50 border-emerald-300 text-emerald-600";
+                                "bg-emerald-50 border-emerald-300 text-emerald-600 shadow-sm";
 
                               lineClass = "border-emerald-300";
                             }
@@ -1176,28 +1025,30 @@ const DashboardHome = ({
                                   stageId || `${getStageName(stage)}-${index}`
                                 }
                               >
-                                {/* Stage */}
-
-                                <div className="flex flex-col items-center w-[125px] shrink-0">
+                                <div
+                                  className="flex flex-col items-center w-[125px] shrink-0"
+                                  style={{
+                                    animationDelay: `${index * 80}ms`,
+                                  }}
+                                >
                                   <div
                                     className={`
-                                        relative
-                                        w-16
-                                        h-16
-                                        rounded-full
-                                        border-2
-                                        flex
-                                        items-center
-                                        justify-center
-                                        transition-all
-                                        duration-300
-                                        ${iconWrapperClass}
-                                      `}
+                                      relative w-16 h-16 rounded-full border-2
+                                      flex items-center justify-center
+                                      transition-all duration-500
+                                      hover:scale-105
+                                      ${iconWrapperClass}
+                                      ${
+                                        state.type === "current"
+                                          ? "animate-[pulse_2.5s_ease-in-out_infinite]"
+                                          : ""
+                                      }
+                                    `}
                                   >
                                     <Icon size={25} />
 
                                     {state.type === "completed" && (
-                                      <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center border-2 border-white">
+                                      <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center border-2 border-white shadow-sm">
                                         <CheckCircle2 size={14} />
                                       </div>
                                     )}
@@ -1209,35 +1060,25 @@ const DashboardHome = ({
 
                                   <div className="text-center mt-3">
                                     <div
-                                      className={`
-                                          text-xs
-                                          font-black
-                                          leading-5
-                                          ${
-                                            state.type === "completed"
-                                              ? "text-emerald-700"
-                                              : state.type === "current"
-                                                ? "text-[#C62828]"
-                                                : "text-[#102A43]"
-                                          }
-                                        `}
+                                      className={`text-xs font-black leading-5 ${
+                                        state.type === "completed"
+                                          ? "text-emerald-700"
+                                          : state.type === "current"
+                                            ? "text-[#C62828]"
+                                            : "text-[#102A43]"
+                                      }`}
                                     >
                                       {getStageName(stage)}
                                     </div>
 
                                     <div
-                                      className={`
-                                          text-[10px]
-                                          font-bold
-                                          mt-1
-                                          ${
-                                            state.type === "completed"
-                                              ? "text-emerald-500"
-                                              : state.type === "current"
-                                                ? "text-[#C62828]"
-                                                : "text-slate-400"
-                                          }
-                                        `}
+                                      className={`text-[10px] font-bold mt-1 ${
+                                        state.type === "completed"
+                                          ? "text-emerald-500"
+                                          : state.type === "current"
+                                            ? "text-[#C62828]"
+                                            : "text-slate-400"
+                                      }`}
                                     >
                                       {state.label}
                                     </div>
@@ -1250,18 +1091,13 @@ const DashboardHome = ({
                                   </div>
                                 </div>
 
-                                {/* Connector */}
-
                                 {!isLast && (
                                   <div
                                     className={`
-                                        mt-8
-                                        w-[70px]
-                                        border-t-2
-                                        border-dashed
-                                        shrink-0
-                                        ${lineClass}
-                                      `}
+                                      mt-8 w-[70px] border-t-2 border-dashed
+                                      shrink-0 transition-colors duration-500
+                                      ${lineClass}
+                                    `}
                                   />
                                 )}
                               </React.Fragment>
@@ -1274,14 +1110,14 @@ const DashboardHome = ({
 
                       <div className="flex flex-wrap items-center justify-center gap-5 mt-3 pt-4 border-t border-slate-100">
                         <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full bg-emerald-500" />
+                          <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm" />
                           <span className="text-[11px] font-bold text-slate-500">
                             تم التنفيذ
                           </span>
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full bg-[#C62828]" />
+                          <span className="w-3 h-3 rounded-full bg-[#C62828] shadow-sm" />
                           <span className="text-[11px] font-bold text-slate-500">
                             المرحلة الحالية
                           </span>
@@ -1307,9 +1143,9 @@ const DashboardHome = ({
         ===================================================== */}
 
         <div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.9fr] gap-5">
-          {/* Inventory Table */}
+          {/* Inventory */}
 
-          <section className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+          <section className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden transition-all duration-500 hover:shadow-md">
             <div className="p-5 pb-3">
               <SectionTitle
                 icon={Warehouse}
@@ -1318,7 +1154,7 @@ const DashboardHome = ({
               />
             </div>
 
-            {inventoryRows.length === 0 ? (
+            {inventoryRowsSafe.length === 0 ? (
               <EmptyState
                 icon={Boxes}
                 title="لا توجد بيانات مخزون"
@@ -1332,13 +1168,9 @@ const DashboardHome = ({
                       <th className="px-3 py-3 text-right font-black">
                         الموديل
                       </th>
-
                       <th className="px-3 py-3 font-black">الكود</th>
-
                       <th className="px-3 py-3 font-black">عدد الأشكال</th>
-
                       <th className="px-3 py-3 font-black">المتاح</th>
-
                       <th className="px-3 py-3 font-black">المحجوز</th>
 
                       {sizeColumns.map((size) => (
@@ -1348,23 +1180,24 @@ const DashboardHome = ({
                       ))}
 
                       <th className="px-3 py-3 font-black">المشحون</th>
-
                       <th className="px-3 py-3 font-black">الإجمالي</th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    {inventoryRows.map((row) => {
-                      const total = row.available + row.shipped;
+                    {inventoryRowsSafe.map((row) => {
+                      const total =
+                        (Number(row.available) || 0) +
+                        (Number(row.shipped) || 0);
 
                       return (
                         <tr
                           key={row.modelId}
-                          className="border-b border-slate-100 hover:bg-blue-50/40 transition"
+                          className="border-b border-slate-100 hover:bg-blue-50/40 transition-all duration-200"
                         >
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-2">
-                              <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 overflow-hidden flex items-center justify-center shrink-0">
+                              <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 overflow-hidden flex items-center justify-center shrink-0 transition-transform duration-300 hover:scale-105">
                                 {row.model?.image_url ? (
                                   <img
                                     src={row.model.image_url}
@@ -1409,7 +1242,7 @@ const DashboardHome = ({
                               key={size}
                               className="px-3 py-3 text-center font-bold text-slate-600"
                             >
-                              {formatNumber(row.sizes[size] || 0)}
+                              {formatNumber(row.sizes?.[size] || 0)}
                             </td>
                           ))}
 
@@ -1426,9 +1259,7 @@ const DashboardHome = ({
 
                     <tr className="bg-blue-50/70 font-black">
                       <td className="px-3 py-3">الإجمالي</td>
-
                       <td />
-
                       <td />
 
                       <td className="px-3 py-3 text-center text-emerald-700">
@@ -1440,7 +1271,7 @@ const DashboardHome = ({
                       </td>
 
                       {sizeColumns.map((size) => {
-                        const totalSize = inventory.reduce((sum, item) => {
+                        const totalSize = inventorySafe.reduce((sum, item) => {
                           if (String(item.size) === String(size)) {
                             return sum + (Number(item.available_qty) || 0);
                           }
@@ -1472,9 +1303,9 @@ const DashboardHome = ({
             )}
           </section>
 
-          {/* Shipment Table */}
+          {/* Shipments */}
 
-          <section className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+          <section className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden transition-all duration-500 hover:shadow-md">
             <div className="p-5 pb-3">
               <SectionTitle
                 icon={Truck}
@@ -1483,7 +1314,7 @@ const DashboardHome = ({
                 action={
                   <button
                     onClick={() => setActivePage("shipments")}
-                    className="text-[#0D5FE8] text-xs font-black flex items-center gap-1"
+                    className="text-[#0D5FE8] text-xs font-black flex items-center gap-1 transition-all duration-200 hover:gap-2"
                   >
                     عرض الكل
                     <ChevronLeft size={14} />
@@ -1504,13 +1335,9 @@ const DashboardHome = ({
                   <thead>
                     <tr className="bg-[#0D2748] text-white">
                       <th className="px-3 py-3 text-right">رقم الشحنة</th>
-
                       <th className="px-3 py-3">الكمية</th>
-
                       <th className="px-3 py-3">شركة الشحن</th>
-
                       <th className="px-3 py-3">الحالة</th>
-
                       <th className="px-3 py-3">الإجراء</th>
                     </tr>
                   </thead>
@@ -1519,7 +1346,7 @@ const DashboardHome = ({
                     {shipmentRowsSafe.slice(0, 5).map((shipment) => (
                       <tr
                         key={shipment.id}
-                        className="border-b border-slate-100 hover:bg-slate-50 transition"
+                        className="border-b border-slate-100 hover:bg-slate-50 transition-all duration-200"
                       >
                         <td className="px-3 py-3 font-black">
                           {shipment.shipment_number || "-"}
@@ -1540,7 +1367,7 @@ const DashboardHome = ({
                         <td className="px-3 py-3 text-center">
                           <button
                             onClick={() => setSelectedShipment(shipment)}
-                            className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 inline-flex items-center justify-center transition"
+                            className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 hover:scale-105 inline-flex items-center justify-center transition-all duration-200"
                           >
                             <Eye size={15} />
                           </button>
@@ -1558,63 +1385,146 @@ const DashboardHome = ({
             INDICATORS
         ===================================================== */}
 
-        <section className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
-          <SectionTitle
-            icon={BarChart3}
-            title="خلاصة المؤشرات الرئيسية"
-            subtitle="ملخص سريع لحالة الإنتاج والمخزون والشحن"
-          />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* Shipping Progress */}
 
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-            <StatCard
-              title="إجمالي المستلم"
-              value={totalReceived}
-              subtitle="الكمية المستلمة"
-              icon={CheckCircle2}
-              iconClass="bg-emerald-50 text-emerald-600"
-            />
+          <div className="group bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex items-center justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
+            <div>
+              <h3 className="font-black text-[#102A43] mb-1">
+                نسبة إنجاز الشحن
+              </h3>
 
-            <StatCard
-              title="إجمالي القطع الحالية"
-              value={totalProductionQuantity}
-              subtitle="إجمالي أوامر التشغيل"
-              icon={Package}
-              iconClass="bg-blue-50 text-blue-700"
-            />
+              <p className="text-xs text-slate-500 font-bold">
+                من إجمالي أوامر التشغيل
+              </p>
 
-            <StatCard
-              title="إجمالي المشحون"
-              value={totalShipped}
-              subtitle="تم شحنها بالفعل"
-              icon={Truck}
-              iconClass="bg-orange-50 text-orange-600"
-            />
+              <div className="mt-4 font-black text-2xl text-emerald-600">
+                {formatNumber(totalShipped)}{" "}
+                <span className="text-sm font-medium text-slate-400">
+                  قطعة مشحونة
+                </span>
+              </div>
+            </div>
 
-            <StatCard
-              title="المتاح بالمخزن"
-              value={inventorySummarySafe.available}
-              subtitle="جاهز للشحن"
-              icon={Boxes}
-              iconClass="bg-violet-50 text-violet-600"
-            />
+            <div className="relative w-24 h-24 flex items-center justify-center transition-transform duration-500 group-hover:scale-105">
+              <svg
+                className="w-full h-full transform -rotate-90"
+                viewBox="0 0 36 36"
+              >
+                <path
+                  className="text-slate-100"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
 
-            <StatCard
-              title="القطع المحجوزة"
-              value={inventorySummarySafe.reserved}
-              subtitle="كميات محجوزة"
-              icon={PackageCheck}
-              iconClass="bg-red-50 text-red-600"
-            />
+                <path
+                  className="text-emerald-500 transition-all duration-1000 ease-out"
+                  strokeDasharray={`${shippingProgressPercentage}, 100`}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                />
+              </svg>
 
-            <StatCard
-              title="عدد الشحنات"
-              value={shipmentCount}
-              subtitle={`${completedShipments} شحنة مكتملة`}
-              icon={Send}
-              iconClass="bg-cyan-50 text-cyan-600"
-            />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-lg font-black text-[#102A43]">
+                  {shippingProgressPercentage}%
+                </span>
+              </div>
+            </div>
           </div>
-        </section>
+
+          {/* Inventory Availability */}
+
+          <div className="group bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex items-center justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
+            <div>
+              <h3 className="font-black text-[#102A43] mb-1">
+                القطع الجاهزة للشحن
+              </h3>
+
+              <p className="text-xs text-slate-500 font-bold">
+                نسبة التوفر في المخزن
+              </p>
+
+              <div className="mt-4 font-black text-2xl text-blue-600">
+                {formatNumber(inventorySummarySafe.available)}{" "}
+                <span className="text-sm font-medium text-slate-400">
+                  قطعة متاحة
+                </span>
+              </div>
+            </div>
+
+            <div className="relative w-24 h-24 flex items-center justify-center transition-transform duration-500 group-hover:scale-105">
+              <svg
+                className="w-full h-full transform -rotate-90"
+                viewBox="0 0 36 36"
+              >
+                <path
+                  className="text-slate-100"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+
+                <path
+                  className="text-blue-600 transition-all duration-1000 ease-out"
+                  strokeDasharray={`${inventoryProgressPercentage}, 100`}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                />
+              </svg>
+
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-lg font-black text-[#102A43]">
+                  {inventoryProgressPercentage}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Customer Service */}
+
+          <div className="group bg-gradient-to-br from-[#0D2748] to-[#1a3d6d] rounded-3xl p-6 shadow-md text-white flex flex-col justify-between relative overflow-hidden transition-all duration-500 hover:-translate-y-1 hover:shadow-xl">
+            <div className="absolute -left-4 -bottom-4 opacity-10 transition-transform duration-700 group-hover:scale-110 group-hover:rotate-6">
+              <Headset size={100} />
+            </div>
+
+            <div className="absolute -top-16 -right-16 w-40 h-40 bg-blue-400/10 rounded-full blur-2xl" />
+
+            <div className="relative z-10 flex items-start gap-4">
+              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center shrink-0 border border-white/30 backdrop-blur-sm transition-transform duration-300 group-hover:scale-105">
+                <Headset size={24} className="text-white" />
+              </div>
+
+              <div>
+                <h3 className="font-black text-lg">تواصل مع خدمة العملاء</h3>
+
+                <p className="text-xs text-blue-200 mt-1 leading-relaxed">
+                  نحن هنا لمساعدتك في أي استفسار يخص إنتاج وشحن الكولكشن الخاص
+                  بك.
+                </p>
+              </div>
+            </div>
+
+            <a
+              href="https://wa.me/201115480308"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative z-10 mt-5 w-full bg-[#25D366] hover:bg-[#1ebd5a] text-white py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all duration-300 shadow-sm hover:shadow-lg hover:-translate-y-0.5"
+            >
+              <MessageCircle size={18} />
+              تواصل الآن عبر الواتساب
+            </a>
+          </div>
+        </div>
 
         {/* =====================================================
             BOTTOM ROW
@@ -1623,7 +1533,7 @@ const DashboardHome = ({
         <div className="grid grid-cols-1 xl:grid-cols-[0.85fr_1fr_0.85fr] gap-5">
           {/* Shipment Path */}
 
-          <section className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
+          <section className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
             <SectionTitle
               icon={Truck}
               title="مسار الشحن"
@@ -1631,14 +1541,13 @@ const DashboardHome = ({
             />
 
             <div className="flex flex-col gap-4 mt-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-blue-50 text-[#0D2748] flex items-center justify-center shrink-0">
+              <div className="flex items-center gap-3 group">
+                <div className="w-12 h-12 rounded-full bg-blue-50 text-[#0D2748] flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 group-hover:bg-blue-100">
                   <FileText size={22} />
                 </div>
 
                 <div>
                   <div className="font-black text-sm">أمر التشغيل</div>
-
                   <div className="text-[11px] text-slate-400">
                     تم إصدار أمر التشغيل
                   </div>
@@ -1647,14 +1556,13 @@ const DashboardHome = ({
 
               <div className="mr-6 border-r-2 border-dashed border-slate-200 h-5" />
 
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
+              <div className="flex items-center gap-3 group">
+                <div className="w-12 h-12 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 group-hover:bg-violet-100">
                   <PackageCheck size={22} />
                 </div>
 
                 <div>
                   <div className="font-black text-sm">تم التجهيز</div>
-
                   <div className="text-[11px] text-slate-400">
                     الكميات وصلت للمخزن
                   </div>
@@ -1663,8 +1571,8 @@ const DashboardHome = ({
 
               <div className="mr-6 border-r-2 border-dashed border-slate-200 h-5" />
 
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <div className="flex items-center gap-3 group">
+                <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 group-hover:bg-emerald-100">
                   <Truck size={22} />
                 </div>
 
@@ -1681,7 +1589,7 @@ const DashboardHome = ({
 
           {/* Recent Shipments */}
 
-          <section className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
+          <section className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
             <SectionTitle
               icon={ClipboardList}
               title="آخر الشحنات"
@@ -1700,10 +1608,10 @@ const DashboardHome = ({
                   <button
                     key={shipment.id}
                     onClick={() => setSelectedShipment(shipment)}
-                    className="w-full flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/40 transition text-right"
+                    className="w-full flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/40 hover:shadow-sm transition-all duration-300 text-right hover:-translate-y-0.5"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0D2748] flex items-center justify-center shrink-0">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0D2748] flex items-center justify-center shrink-0 transition-transform duration-300 hover:scale-105">
                         <Truck size={18} />
                       </div>
 
@@ -1733,14 +1641,14 @@ const DashboardHome = ({
 
           {/* Collections Progress */}
 
-          <section className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
+          <section className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
             <SectionTitle
               icon={AlertTriangle}
               title="حالة الكولكشنات"
               subtitle="نسبة الشحن لكل كولكشن"
             />
 
-            {enrichedCollections.length === 0 ? (
+            {collectionsSafe.length === 0 ? (
               <EmptyState
                 icon={Boxes}
                 title="لا توجد كولكشنات"
@@ -1748,11 +1656,17 @@ const DashboardHome = ({
               />
             ) : (
               <div className="space-y-4">
-                {enrichedCollections.slice(0, 5).map((collection) => {
+                {collectionsSafe.slice(0, 5).map((collection, index) => {
                   const progress = getCollectionProgress(collection);
 
                   return (
-                    <div key={collection.id} className="space-y-2">
+                    <div
+                      key={collection.id}
+                      className="space-y-2"
+                      style={{
+                        animationDelay: `${index * 70}ms`,
+                      }}
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-xs font-black truncate">
                           {collection.name}
@@ -1765,18 +1679,13 @@ const DashboardHome = ({
 
                       <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                         <div
-                          className={`
-                              h-full
-                              rounded-full
-                              transition-all
-                              ${
-                                progress >= 100
-                                  ? "bg-emerald-500"
-                                  : "bg-[#0D2748]"
-                              }
-                            `}
+                          className={`h-full rounded-full transition-all duration-1000 ease-out ${
+                            progress >= 100
+                              ? "bg-emerald-500"
+                              : "bg-gradient-to-l from-[#0D2748] to-[#0D5FE8]"
+                          }`}
                           style={{
-                            width: `${progress}%`,
+                            width: `${Math.min(100, progress)}%`,
                           }}
                         />
                       </div>
@@ -1810,8 +1719,11 @@ const DashboardHome = ({
         ===================================================== */}
 
         <div className="flex justify-center pt-1">
-          <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-400 shadow-sm">
-            <RefreshCw size={13} />
+          <div className="group inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-400 shadow-sm transition-all duration-300 hover:border-emerald-200 hover:text-emerald-600 hover:shadow-sm">
+            <RefreshCw
+              size={13}
+              className="transition-transform duration-700 group-hover:rotate-180"
+            />
             جميع البيانات محدثة من قاعدة البيانات
           </div>
         </div>

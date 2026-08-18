@@ -4,3 +4,18 @@
 body {
   font-family: "Rubik", sans-serif;
 }
+@keyframes statCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-stat-card {
+  animation: statCardIn 0.45s ease-out both;
+}
