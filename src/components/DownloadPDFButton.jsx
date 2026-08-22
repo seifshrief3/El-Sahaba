@@ -4,6 +4,7 @@ import { supabase } from "../../supabase";
 import logo from "../assets/logo.jpeg";
 
 const DownloadPDFButton = ({ collection }) => {
+  console.log(collection);
   const [isDownloading, setIsDownloading] = useState(false);
   const [detailedCollection, setDetailedCollection] = useState(null);
   const pdfTemplateRef = useRef(null);
@@ -93,21 +94,45 @@ const DownloadPDFButton = ({ collection }) => {
         }
         const info = tpContent?.basic_info || tpContent || {};
 
-        let finalColors = [];
-        if (m.colors && m.colors !== "-") {
-          finalColors = Array.isArray(m.colors)
-            ? m.colors
-            : String(m.colors)
-                .split(/[,،/-]/)
-                .map((c) => c.trim())
-                .filter(Boolean);
-        } else if (info.colors && info.colors !== "-") {
-          finalColors = Array.isArray(info.colors)
-            ? info.colors
-            : String(info.colors)
-                .split(/[,،/-]/)
-                .map((c) => c.trim())
-                .filter(Boolean);
+        const normalizeColors = (colors) => {
+          if (!colors || colors === "-") return [];
+
+          // لو Array
+          if (Array.isArray(colors)) {
+            return colors
+              .map((color) => {
+                // لو String
+                if (typeof color === "string") {
+                  return color.trim();
+                }
+
+                // لو Object
+                if (typeof color === "object" && color !== null) {
+                  return (
+                    color.color ||
+                    color.name ||
+                    color.name_ar ||
+                    color.value ||
+                    ""
+                  );
+                }
+
+                return "";
+              })
+              .filter(Boolean);
+          }
+
+          // لو String
+          return String(colors)
+            .split(/[,،/-]/)
+            .map((c) => c.trim())
+            .filter(Boolean);
+        };
+
+        let finalColors = normalizeColors(m.colors);
+
+        if (finalColors.length === 0) {
+          finalColors = normalizeColors(info.colors);
         }
 
         let finalSizes = [];
